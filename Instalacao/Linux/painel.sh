@@ -52,22 +52,30 @@ if [ -n "$PANEL_FOUND" ]; then
     echo ""
     echo "Iniciando painel..."
     cd "$PANEL_DIR"
-    # Procura um Python que realmente tenha a parte grafica (tkinter).
-    # No macOS e comum ter varios Pythons e so alguns trazerem tkinter.
+    # Escolhe o Python que abre o painel de verdade, nao so o primeiro que
+    # tenha tkinter. Um Tk 8.5 (o Aqua antigo que a Apple ainda embarca em
+    # /usr/bin/python3) cria a janela e nao desenha nada dentro: o painel
+    # abre em branco. Caminhos absolutos primeiro, porque quem abre pelo
+    # gerenciador de arquivos nao herda o PATH do shell.
     PY=""
-    for CAND in python3 python /usr/bin/python3 /opt/homebrew/bin/python3; do
+    PY_TK_VELHO=""
+    for CAND in /opt/homebrew/bin/python3 /usr/local/bin/python3 python3 python /usr/bin/python3; do
         command -v "$CAND" >/dev/null 2>&1 || [ -x "$CAND" ] || continue
-        if "$CAND" -c "import tkinter" >/dev/null 2>&1; then PY="$CAND"; break; fi
-        [ -z "$PY" ] && PY="$CAND"
+        TKVER="$("$CAND" -c 'import tkinter; print(tkinter.Tcl().call("info","patchlevel"))' 2>/dev/null)"
+        [ -n "$TKVER" ] || continue
+        case "$TKVER" in
+            8.[0-5]*) [ -z "$PY_TK_VELHO" ] && PY_TK_VELHO="$CAND"; continue ;;
+        esac
+        PY="$CAND"
+        break
     done
     if [ -z "$PY" ]; then
-        echo "Python nao encontrado. Instale o Python 3 e rode de novo."
-        read -p "Pressione ENTER para fechar..."
-        exit 1
-    fi
-    if ! "$PY" -c "import tkinter" >/dev/null 2>&1; then
-        echo "Falta o tkinter (parte grafica do Python)."
-        echo "  macOS: brew install python-tk"
+        if [ -n "$PY_TK_VELHO" ]; then
+            echo "O Python encontrado ($PY_TK_VELHO) traz o Tk 8.5, que abre o painel em branco."
+        else
+            echo "Nao encontrei um Python 3 com a parte grafica (tkinter)."
+        fi
+        echo "  macOS: brew install python python-tk"
         echo "  Linux: sudo apt install python3-tk"
         read -p "Pressione ENTER para fechar..."
         exit 1

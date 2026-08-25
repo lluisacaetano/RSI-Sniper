@@ -829,7 +829,7 @@ if [ -n "$PANEL_FOUND" ]; then
     done
     if [ -z "$PY" ]; then
         if [ -n "$PY_TK_VELHO" ]; then
-            echo "O Python deste Mac ($PY_TK_VELHO) traz o Tk 8.5, que abre o painel em branco."
+            echo "O Python encontrado ($PY_TK_VELHO) traz o Tk 8.5, que abre o painel em branco."
         else
             echo "Nao encontrei um Python 3 com a parte grafica (tkinter)."
         fi
