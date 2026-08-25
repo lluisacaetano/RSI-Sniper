@@ -380,8 +380,8 @@
       </div>
       <div class="card">
         <span class="k">Confirmação</span>
-        <h3 style="color:var(--rsi)">Quatro filtros com direito de veto</h3>
-        <p>Agressão, volume profile, tendência e volatilidade. O RSI dá o sinal; qualquer filtro ligado pode barrar. Um basta.</p>
+        <h3 style="color:var(--rsi)">Três vetos e um ajuste</h3>
+        <p>Agressão, volume profile e tendência podem barrar o sinal do RSI — um basta. A volatilidade não barra: ela troca o stop e o alvo fixos por medidas proporcionais ao movimento do momento.</p>
       </div>
     </div>
     <svg id="rsiChart" class="sangra" viewBox="0 0 1280 226" style="margin-top:32px;height:226px" aria-hidden="true"></svg>
@@ -584,7 +584,7 @@
         <table class="apertada">
           <tr><td class="campo">Candles</td><td class="val">60 · 1 a 5000</td><td class="desc"><span class="mais">Aumentar</span> dá perfil mais estável, que muda devagar.</td></tr>
           <tr><td class="campo">Agrupamento</td><td class="val">5 · 1 a 1000</td><td class="desc"><span class="mais">Maior</span> deixa o perfil mais grosso e rápido, com menos detalhe.</td></tr>
-          <tr><td class="campo">Zona do POC</td><td class="val">10</td><td class="desc"><span class="mais">Aumentar</span> alarga a zona neutra e barra mais entradas perto do equilíbrio.</td></tr>
+          <tr><td class="campo">Zona do POC</td><td class="val">10</td><td class="desc">Faixa em torno do POC onde o preço conta como “em equilíbrio”: ali o filtro não barra nada. <span class="mais">Aumentar</span> alarga essa faixa e deixa passar <b>mais</b> entradas.</td></tr>
         </table>
       </div>
       <div class="card filtro f3">

@@ -435,6 +435,7 @@
         <h3>Aba Parâmetros de entrada</h3>
         <div class="callout good">
           <span class="label">Quando dá para mudar cada coisa</span>
+          <p><b>Antes de mexer campo a campo, carregue o preset:</b> clique com o botão direito na lista de parâmetros, escolha <b>Carregar</b> e selecione <code>referencia.set</code> — ele vem no pacote e o instalador o coloca em <code>MQL5/Profiles/Tester</code>. É o conjunto que reproduz os números da apresentação; sem ele o teste roda com os padrões do robô.</p>
           <p>Tudo nesta aba pode ser editado <b>agora</b>, antes de iniciar. Depois que o robô estiver rodando, parte dos parâmetros ainda pode ser alterada pelo <b>painel de controle</b>, sem reiniciar: stop loss, take profit, stop móvel, volume e os quatro filtros (agressão, volume profile, tendência e ATR). O painel também devolve tudo ao valor inicial. Os períodos e níveis do RSI também mudam pelo painel em tempo real: o robô recria o indicador quando o período muda, e volta ao valor anterior se o novo não valer.</p>
         </div>
         <table class="cfg">
@@ -485,10 +486,10 @@
         <h3>Monitoramento: o que cada filtro significa</h3>
         <p class="d">O checkbox <b>é</b> o título do bloco. Marcar liga o filtro e abre a leitura ao vivo mais os parâmetros dele. Filtro desligado não barra nada: o robô opera só pelo RSI.</p>
         <table class="duo">
-          <tr><td>Agressão</td><td>Filtro de <b>fluxo de ordens</b>. Soma o volume que entrou comprando e vendendo nos últimos segundos e só libera a entrada se o lado dominante concordar com o sinal do RSI. Depende de dado em tempo real — no backtest ele não funciona, porque o histórico não guarda fluxo.</td></tr>
-          <tr><td>Volume Profile</td><td>Mapa de onde o volume se concentrou por faixa de preço. O <b>POC</b> é o preço mais negociado, a região de equilíbrio; <b>VAH</b> e <b>VAL</b> são os limites da faixa que concentra 70% do volume. Serve como confirmação: perto do POC o preço tende a ficar preso.</td></tr>
+          <tr><td>Agressão</td><td>Filtro de <b>fluxo de ordens</b>. Soma o volume que entrou comprando e vendendo nos últimos segundos e só libera a entrada se o lado dominante concordar com o sinal do RSI. A regra é dupla: um lado precisa ter pelo menos o percentual de confirmação <b>e</b> a janela precisa alcançar o volume mínimo. Falhando qualquer uma das duas, a direção fica NEUTRO e a entrada é barrada. Depende de dado em tempo real — no backtest ele não funciona, porque o histórico não guarda fluxo.</td></tr>
+          <tr><td>Volume Profile</td><td>Mapa de onde o volume se concentrou por faixa de preço. O <b>POC</b> é o preço mais negociado, a região de equilíbrio; <b>VAH</b> e <b>VAL</b> são os limites da faixa que concentra 70% do volume. Ligado, ele não compra com o preço <b>acima</b> do POC nem vende com o preço <b>abaixo</b> dele — dentro da margem o preço conta como “no POC” e nada é barrado. Serve como confirmação: perto do POC o preço tende a ficar preso.</td></tr>
           <tr><td>Tendência</td><td>Média móvel. Ligado, só compra acima da média e só vende abaixo dela. É o filtro que <b>mais barra sinal</b> — descarta toda entrada contra a tendência.</td></tr>
-          <tr><td>Volatilidade</td><td>Mede pelo <b>ATR</b> o tamanho do movimento típico do momento. Ligado, o stop e o alvo deixam de ser pontos fixos e passam a ser calculados pela volatilidade — por isso Stop Loss e Take Profit somem das Configurações quando ele está marcado.</td></tr>
+          <tr><td>Volatilidade</td><td>Mede pelo <b>ATR</b> o tamanho do movimento típico do momento. Diferente dos outros três, <b>este não barra entrada nenhuma</b>: ele muda a distância do stop e do alvo. Ligado, o stop e o alvo deixam de ser pontos fixos e passam a ser calculados pela volatilidade — por isso Stop Loss e Take Profit somem das Configurações quando ele está marcado.</td></tr>
         </table>
       </div></article>
 
@@ -507,9 +508,9 @@
         <table class="cfg">
           <tr><td>Candles</td><td>60 · 1 a 5000</td><td>Quantos candles entram no cálculo do perfil. Aumentar dá um perfil mais estável, que muda devagar; diminuir cola no preço recente.</td></tr>
           <tr><td>Agrupamento</td><td>5 · 1 a 1000</td><td>Ticks por faixa de preço. Maior deixa o perfil mais grosso e mais rápido de montar, com menos detalhe; menor detalha mais e pesa mais.</td></tr>
-          <tr><td>Zona do POC</td><td>10 · 0 a 10000</td><td>Pontos em torno do POC tratados como região neutra. Aumentar alarga a zona morta e barra mais entradas perto do preço de equilíbrio.</td></tr>
+          <tr><td>Zona do POC</td><td>10 · 0 a 10000</td><td>Pontos em torno do POC em que o preço conta como “em equilíbrio”: ali o filtro não barra nada. Aumentar alarga essa faixa e deixa passar <b>mais</b> entradas.</td></tr>
         </table>
-        <p class="d">Leitura ao vivo: <b>POC</b>, <b>VAH</b> e <b>VAL</b> em pontos, e <b>Zona</b> dizendo se o preço está ACIMA_POC, ABAIXO_POC ou NA_POC.</p>
+        <p class="d">Leitura ao vivo: <b>POC</b>, <b>VAH</b> e <b>VAL</b> em pontos, e <b>Zona</b> dizendo se o preço está <b>ACIMA DO POC</b>, <b>ABAIXO DO POC</b> ou <b>NO POC</b>.</p>
       </div></article>
 
       <article class="step"><div class="body">
@@ -549,16 +550,16 @@
       <article class="step"><div class="body">
         <h3>Botões</h3>
         <table class="duo">
-          <tr><td>Salvar</td><td>Envia todos os parâmetros ao robô, que aplica na hora, sem reiniciar.</td></tr>
+          <tr><td>Salvar</td><td>Envia todos os parâmetros ao robô e <b>espera a confirmação dele</b>. O painel mostra “aguardando o robô…” e só troca para “✓ robô aplicou N parâmetros” quando o robô responde — o N é a contagem que <b>ele</b> devolveu. Se ninguém leu o comando, avisa em vermelho em vez de anunciar sucesso.</td></tr>
           <tr><td>Resetar</td><td>Devolve tudo aos valores com que o robô foi iniciado.</td></tr>
-          <tr><td>Pausar</td><td>Para de abrir operações novas. As que estão abertas continuam.</td></tr>
+          <tr><td>Pausar</td><td>Para de abrir operações novas. As que estão abertas continuam, e o stop móvel segue acompanhando o preço para proteger o lucro delas.</td></tr>
           <tr><td>Fechar tudo</td><td>Encerra as posições abertas agora, a mercado.</td></tr>
-          <tr><td>Parar EA</td><td>Desliga o robô no gráfico.</td></tr>
+          <tr><td>Parar EA</td><td>Remove o robô do gráfico <b>e fecha o painel</b>. Para voltar, é preciso colocar o robô no gráfico de novo e reabrir o painel.</td></tr>
           <tr><td>Diagnóstico · Ajuda</td><td>Estado da ligação entre painel e robô, e a explicação de cada campo dentro do próprio painel.</td></tr>
         </table>
         <div class="callout">
           <span class="label">Campo vazio ou fora do limite</span>
-          <p>O painel recusa e o robô mantém o valor que já estava valendo. Os limites acima são os que ele aceita; fora deles o campo é ignorado, sem aviso no gráfico.</p>
+          <p>São dois comportamentos diferentes. <b>Campo vazio</b> é pulado: o robô mantém o valor que já estava valendo. <b>Valor fora do limite</b> abre um aviso dizendo o campo e a faixa aceita, e <b>cancela o salvamento inteiro</b> — nenhum parâmetro é enviado. Sobrevenda maior ou igual à sobrecompra também é barrada.</p>
         </div>
       </div></article>
 
