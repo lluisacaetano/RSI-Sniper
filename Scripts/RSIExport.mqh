@@ -55,6 +55,10 @@ private:
    string arquivo_comandos;
    datetime ultimo_comando_lido;
    string ultimo_comando_processado;
+   // Eco do ultimo comando aceito, para o painel confirmar que chegou aqui.
+   // Sem isso o painel so sabe que gravou o arquivo, nao que o robo leu.
+   string ultimo_comando_ts;
+   int    ultimo_comando_qtd;
    int contador_export;
    int contador_erros;
    CTrade trade_fechar;  // Reutilizado para fechar posicoes
@@ -69,6 +73,8 @@ public:
       tem_cfg = false;
       ultimo_comando_lido = 0;
       ultimo_comando_processado = "";
+      ultimo_comando_ts = "";
+      ultimo_comando_qtd = 0;
       contador_export = 0;
       contador_erros = 0;
       trade_fechar.LogLevel(LOG_LEVEL_NO);  // Desabilita logs automaticos
@@ -122,6 +128,8 @@ public:
       json += "  \"usar_trailing\": true,\n";
       json += "  \"trailing_pontos\": 150,\n";
       json += "  \"ultimo_comando\": \"\",\n";
+      json += "  \"ultimo_comando_ts\": \"\",\n";
+      json += "  \"ultimo_comando_qtd\": 0,\n";
       json += "  \"saldo\": 0.00,\n";
       json += "  \"lucro_aberto\": 0.00,\n";
       json += "  \"agressao_compra\": 0.0,\n";
@@ -198,6 +206,8 @@ public:
       json += "  \"usar_trailing\": " + (usar_trailing ? "true" : "false") + ",\n";
       json += "  \"trailing_pontos\": " + DoubleToString(trailing_pts, 0) + ",\n";
       json += "  \"ultimo_comando\": \"" + ultimo_comando_processado + "\",\n";
+      json += "  \"ultimo_comando_ts\": \"" + ultimo_comando_ts + "\",\n";
+      json += "  \"ultimo_comando_qtd\": " + IntegerToString(ultimo_comando_qtd) + ",\n";
       // Novos campos de monitoramento
       json += "  \"saldo\": " + DoubleToString(saldo, 2) + ",\n";
       json += "  \"lucro_aberto\": " + DoubleToString(lucro_aberto, 2) + ",\n";
@@ -311,10 +321,16 @@ public:
 
       datetime timestamp_comando = StringToTime(timestamp_str);
 
-      if(timestamp_comando <= ultimo_comando_lido)
+      if(timestamp_comando <= ultimo_comando_lido) {
+         // Apaga tambem quando ignora. Sem isso o arquivo fica parado na pasta
+         // para sempre e o painel nao consegue distinguir "o robo ja tratou"
+         // de "o robo nunca leu".
+         FileDelete(arquivo_comandos, FILE_COMMON);
          return "";
+      }
 
       ultimo_comando_lido = timestamp_comando;
+      ultimo_comando_ts = timestamp_str;   // eco para o painel casar com o que enviou
 
       FileDelete(arquivo_comandos, FILE_COMMON);
 
@@ -402,6 +418,7 @@ public:
             }
             Print("[CONFIG] ", aplicados, " parametro(s) aplicado(s) pelo painel");
             ultimo_comando_processado = "CONFIG SALVA";
+            ultimo_comando_qtd = aplicados;   // o painel mostra este numero, nao o dele
             sucesso = true;
          }
          else {
@@ -427,6 +444,7 @@ public:
                Print("[CONFIG] CONFIGURACOES SALVAS (formato antigo):");
                Print("    Lote: ", DoubleToString(config.lote, 2), " | SL: ", config.sl, " pts | TP: ", config.tp, " pts");
                ultimo_comando_processado = "CONFIG SALVA";
+               ultimo_comando_qtd = total;
                sucesso = true;
             }
          }

@@ -197,6 +197,12 @@ class RSIPanelModern(ctk.CTk):
         self.atr_var = ctk.BooleanVar(value=False)
         self.ultimo_timestamp = None
         self.conexao_ativa = False
+
+        # Salvamento que ainda espera resposta do robo. Enquanto houver um aqui,
+        # os campos nao sao repintados pelo JSON: o valor digitado tem que ficar
+        # na tela ate o robo dizer o que fez com ele.
+        self.confirmacao_pendente = None
+        self.TEMPO_CONFIRMACAO = 6      # segundos de espera pela resposta do robo
         self.checkboxes_sincronizados = False
         self.entries_param = {}
         self.blocos_monitor = {}
@@ -1193,6 +1199,11 @@ class RSIPanelModern(ctk.CTk):
             dados = self._ler_dados()
             agora = time.time()
 
+            # Antes de qualquer desenho: um salvamento pendente precisa de
+            # resposta a cada ciclo, inclusive quando o JSON nao tem nada de
+            # novo - e justamente o JSON parado que denuncia o robo parado.
+            self._conferir_confirmacao(dados or {})
+
             if dados:
                 novo_timestamp = dados.get('timestamp', '')
 
@@ -1396,7 +1407,8 @@ class RSIPanelModern(ctk.CTk):
                                      self.entries['tp'], self.entry_trailing]
                     entry_widgets += list(self.entries_param.values())
                     internos = [w._entry for w in entry_widgets if hasattr(w, '_entry')]
-                    if foco not in entry_widgets and foco not in internos:
+                    if (foco not in entry_widgets and foco not in internos
+                            and not self.confirmacao_pendente):
                         self.entries['lote'].delete(0, 'end')
                         self.entries['lote'].insert(0, str(dados.get('lote', 1.0)))
                         self.entries['sl'].delete(0, 'end')
@@ -1468,15 +1480,20 @@ class RSIPanelModern(ctk.CTk):
         - Linha 2: timestamp (para o EA saber se é comando novo)
 
         O EA lê, processa e deleta o arquivo de comandos.
+
+        Devolve o timestamp gravado, que serve de protocolo com o robô: ele
+        republica esse mesmo texto no JSON quando lê o comando. Devolve ""
+        se não conseguiu gravar. Gravar não é o mesmo que ser aplicado - quem
+        quiser confirmação de verdade tem que esperar o eco.
         """
         try:
             timestamp = datetime.now().strftime("%Y.%m.%d %H:%M:%S")
             with open(self.command_file, "w", encoding="utf-8") as f:
                 f.write(f"{comando}\n{timestamp}")
-            return True
+            return timestamp
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao enviar comando: {e}")
-            return False
+            return ""
 
     def _pausar_retomar(self):
         self._enviar_comando("PAUSAR")
@@ -1492,11 +1509,19 @@ class RSIPanelModern(ctk.CTk):
             self.after(500, self.destroy)  # Aguarda 500ms para o comando ser enviado
 
     def _avisar_config(self, texto, cor, segundos=3):
-        """Mostra uma confirmação embaixo dos botões e some depois."""
+        """
+        Mostra uma confirmação embaixo dos botões e some depois.
+
+        Com segundos=0 o aviso fica na tela ate alguem trocar por outro. E o
+        caso do "aguardando o robo": sumir sozinho daria a entender que deu
+        certo, que e exatamente o que nao se sabe ainda.
+        """
         try:
             self.lbl_status_config.configure(text=texto, text_color=cor)
             if not self.lbl_status_config.winfo_ismapped():
                 self.lbl_status_config.pack(pady=(0, 10))
+            if segundos <= 0:
+                return
             self.after(segundos * 1000, self._limpar_aviso_config)
         except Exception:
             pass
@@ -1852,8 +1877,64 @@ class RSIPanelModern(ctk.CTk):
             pares[chave] = opcoes.get(menu.get(), 0)
 
         comando = "SALVAR_CONFIG:" + ";".join(f"{k}={v}" for k, v in pares.items())
-        if self._enviar_comando(comando):
-            self._avisar_config(f"✓ {len(pares)} parâmetros aplicados", self.colors['accent_green'])
+        timestamp = self._enviar_comando(comando)
+        if not timestamp:
+            return
+
+        # Gravar o arquivo nao é aplicar. Quem aplica é o robô, e ele pode nem
+        # estar rodando - foi isso que fazia o painel anunciar sucesso e os
+        # campos voltarem aos valores antigos 250 ms depois. Agora o painel
+        # espera o robô devolver o eco antes de dizer qualquer coisa.
+        self.confirmacao_pendente = {
+            'ts': timestamp,
+            'enviados': len(pares),
+            'prazo': time.monotonic() + self.TEMPO_CONFIRMACAO,
+        }
+        self._avisar_config(f"→ {len(pares)} parâmetros enviados, aguardando o robô...",
+                            self.colors['accent_yellow'], 0)
+
+    def _conferir_confirmacao(self, dados):
+        """
+        Fecha o ciclo do salvamento com a resposta do robô, não com a do painel.
+
+        O robô republica no JSON o timestamp do comando que leu (ultimo_comando_ts)
+        e quantos parâmetros aceitou (ultimo_comando_qtd). Casar esse eco com o
+        que foi enviado é a única prova de que o comando chegou.
+
+        Passado o prazo sem eco, o arquivo de comando ainda em disco é a prova do
+        contrário: o robô apaga o arquivo assim que lê, então se ele continua lá
+        ninguém leu - robô parado, backtest encerrado ou pasta Common/Files
+        diferente da que o robô usa.
+        """
+        pendente = self.confirmacao_pendente
+        if not pendente:
+            return
+
+        if dados.get('ultimo_comando_ts') == pendente['ts']:
+            quantos = dados.get('ultimo_comando_qtd') or pendente['enviados']
+            self.confirmacao_pendente = None
+            self._avisar_config(f"✓ robô aplicou {quantos} parâmetros",
+                                self.colors['accent_green'])
+            return
+
+        if time.monotonic() < pendente['prazo']:
+            return
+
+        self.confirmacao_pendente = None
+
+        if os.path.exists(self.command_file):
+            self._avisar_config("✗ o robô não leu o comando — ele está rodando?",
+                                self.colors['accent_red'], 8)
+        elif dados and 'ultimo_comando_ts' not in dados:
+            # Robô de versão anterior: consome o arquivo mas não sabe ecoar.
+            # Só vale afirmar isso com JSON na mão; sem dado nenhum cai no else.
+            self._avisar_config(
+                f"✓ robô leu os {pendente['enviados']} parâmetros "
+                "(recompile o EA para ver a contagem dele)",
+                self.colors['accent_green'], 6)
+        else:
+            self._avisar_config("✗ o robô leu mas não confirmou o salvamento",
+                                self.colors['accent_red'], 8)
 
     def _resetar_config(self):
         if messagebox.askyesno("Confirmar", "Resetar para valores originais?"):
