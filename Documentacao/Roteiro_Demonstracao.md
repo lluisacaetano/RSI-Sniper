@@ -9,7 +9,22 @@ parâmetros. Funciona a qualquer hora — não depende do mercado estar aberto.
 2. Espere aparecer **CONECTADO** no canto inferior direito. Sem isso o testador
    reclama de "não sincronizado" e não inicia.
 
-## Subir o robô no testador
+## Um clique (o caminho da apresentação)
+
+Dê dois cliques em **`Abrir_Demonstracao.command`**, na pasta do projeto.
+
+Ele faz tudo sozinho: sobe o MetaTrader com o testador em modo visual, carrega o
+preset `referencia.set`, espera o robô começar a publicar e abre o painel já
+conectado. Leva cerca de um minuto. Se já houver um MetaTrader aberto, ele
+pergunta antes de fechar.
+
+Se aparecer *"O robô não começou a publicar"*, o terminal não estava conectado à
+corretora — abra o MetaTrader normal, espere o **CONECTADO** no canto inferior
+direito, feche e rode de novo.
+
+Só siga os passos manuais abaixo se o lançador falhar.
+
+## Subir o robô no testador (manual)
 
 3. `Ctrl+R` abre o **Testador de Estratégia** na parte de baixo da tela.
    (Ou menu **Ver → Testador de estratégia**.)
