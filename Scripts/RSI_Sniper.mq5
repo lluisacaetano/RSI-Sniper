@@ -1025,13 +1025,17 @@ void OnTick() {
    if(UsarPainelExterno && exportador != NULL)
       ExportarDadosPainelExterno();
 
-   if(cfg.pausado)
-      return;
-
    int total_positions = PositionsTotal();
 
+   // O stop movel corre ANTES do bloqueio da pausa, de proposito. Pausar quer
+   // dizer "nao abre operacao nova", nao "abandona as que estao abertas": com o
+   // return antes daqui, quem pausasse com posicao aberta ficava com o stop
+   // congelado onde estava, sem proteger o lucro que viesse depois.
    if(cfg.trailing && total_positions > 0)
       ApplyTrailingStop();
+
+   if(cfg.pausado)
+      return;
 
    // ✅ Calcula RSI ANTES de verificar cfg.max_pos (permite reset de flags)
    if(CopyBuffer(rsi_handle, 0, 0, 3, rsi_buffer) <= 0)
