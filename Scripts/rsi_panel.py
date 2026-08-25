@@ -176,8 +176,11 @@ class RSIPanelModern(ctk.CTk):
         self.MARGEM_JANELA = 24   # respiro entre a coluna mais alta e a borda
 
         # Detecta caminho do MetaTrader
+        self.home_base = Path.home()   # os testes trocam por um Wine de mentira
+        self.confirmacao_pendente = None   # antes da primeira revisao de pasta
         self.common_path = self._detectar_caminho()
         self.modo_atual = self._detectar_modo()
+        self.modo_exibido = None       # o selo da tela acompanha no proximo ciclo
         self._atualizar_arquivos()
 
         print("=" * 60)
@@ -201,7 +204,6 @@ class RSIPanelModern(ctk.CTk):
         # Salvamento que ainda espera resposta do robo. Enquanto houver um aqui,
         # os campos nao sao repintados pelo JSON: o valor digitado tem que ficar
         # na tela ate o robo dizer o que fez com ele.
-        self.confirmacao_pendente = None
         self.TEMPO_CONFIRMACAO = 6      # segundos de espera pela resposta do robo
         self.checkboxes_sincronizados = False
         self.entries_param = {}
@@ -277,9 +279,17 @@ class RSIPanelModern(ctk.CTk):
         - Linux: usa ~/.wine/drive_c/...
 
         Tenta múltiplos caminhos possíveis e retorna o primeiro que existir.
+
+        RSI_COMMON_PATH, quando definida, manda mais que qualquer detecção: é a
+        válvula de escape para um Wine que invente um perfil que a busca abaixo
+        não preveja.
         """
-        sistema = platform.system()
-        home = Path.home()
+        forcado = os.getenv("RSI_COMMON_PATH", "").strip()
+        if forcado:
+            return str(Path(forcado).expanduser())
+
+        sistema = self.sistema
+        home = Path(self.home_base)
         usuario_sistema = os.getenv("USER", "user")
 
         if sistema == "Darwin":
@@ -322,6 +332,74 @@ class RSIPanelModern(ctk.CTk):
                 return str(caminho)
 
         return str(caminhos_possiveis[0] if caminhos_possiveis else home / "MetaQuotes/Terminal/Common/Files")
+
+    # Só migra de pasta com dado claramente mais fresco. Sem essa margem o painel
+    # ficaria pulando entre duas pastas escritas no mesmo segundo.
+    MARGEM_MIGRACAO = 3.0
+
+    def _revisar_caminho(self, forcar=False):
+        """
+        Reavalia em qual Common/Files o robô está publicando, e migra se mudou.
+
+        A pasta era escolhida uma vez, no arranque, e nunca mais revista -
+        enquanto o canal (LIVE/BACKTEST) era redetectado a cada 250 ms. Quem
+        abrisse o painel com a pasta certa ainda fria passava a sessão inteira
+        falando com uma pasta morta: lia JSON velho, mostrava valores velhos e
+        gravava comando que ninguém buscava. O robô troca de pasta de verdade -
+        o MetaTrader aberto pelo aplicativo roda como usuário Wine "user", e o
+        wine chamado na linha de comando roda como o usuário do Mac.
+
+        Nunca migra no meio de uma confirmação pendente: o arquivo de comando
+        ainda em disco é a prova de que o robô não leu, e ele ficaria para trás
+        na pasta anterior. Devolve True se trocou de pasta.
+        """
+        if self.confirmacao_pendente and not forcar:
+            return False
+
+        atual = self.common_path
+        candidato = self._detectar_caminho()
+
+        if os.path.realpath(candidato) == os.path.realpath(atual):
+            return False
+        if self._frescor_dados(candidato) <= self._frescor_dados(atual) + self.MARGEM_MIGRACAO:
+            return False
+
+        self.common_path = candidato
+        os.makedirs(self.common_path, exist_ok=True)
+        self._atualizar_arquivos()
+        self.checkboxes_sincronizados = False
+        print(f"  painel migrou de pasta -> {self.common_path}")
+        return True
+
+    def _sincronizar_destino(self, forcar=False):
+        """
+        Aponta o painel para a pasta E o canal que o robô está usando agora.
+
+        Os dois andam juntos: migrar de pasta sem redetectar o canal deixaria o
+        painel lendo rsi_data_BACKTEST.json numa pasta onde o robô publica LIVE.
+        Devolve (mudou_pasta, mudou_canal).
+        """
+        mudou_pasta = self._revisar_caminho(forcar=forcar)
+
+        novo_modo = self._detectar_modo()
+        mudou_modo = novo_modo != self.modo_atual
+        if mudou_modo:
+            self.modo_atual = novo_modo
+
+        if mudou_pasta or mudou_modo:
+            self._atualizar_arquivos()
+            self.checkboxes_sincronizados = False
+
+        return mudou_pasta, mudou_modo
+
+    def _rotulo_pasta(self):
+        """Nome curto da Common/Files em uso - o perfil do Wine, quando dá."""
+        partes = Path(self.common_path).parts
+        if "users" in partes:
+            i = partes.index("users")
+            if i + 1 < len(partes):
+                return f"perfil {partes[i + 1]}"
+        return os.path.basename(self.common_path.rstrip(os.sep)) or self.common_path
 
     # ═══════════════════════════════════════════════════════════════
     # INTERFACE - Modern Trading Dashboard
@@ -1176,19 +1254,18 @@ class RSIPanelModern(ctk.CTk):
         """
         Loop principal de atualização - roda a cada 250ms.
 
-        1. Verifica se o modo mudou (LIVE <-> BACKTEST)
+        1. Verifica se a pasta ou o canal do robô mudaram (LIVE <-> BACKTEST)
         2. Lê dados do arquivo JSON exportado pelo EA
         3. Atualiza todos os labels e indicadores visuais
         4. Sincroniza campos de configuração (apenas se não tiverem foco)
         """
         try:
-            # Permite alternar entre LIVE e BACKTEST sem reiniciar
-            novo_modo = self._detectar_modo()
-            if novo_modo != self.modo_atual:
-                self.modo_atual = novo_modo
-                self._atualizar_arquivos()
+            # Acompanha o robô: a pasta e o canal podem mudar com o painel
+            # aberto, e antes só o canal era revisto.
+            self._sincronizar_destino()
+            if self.modo_atual != self.modo_exibido:
+                self.modo_exibido = self.modo_atual
                 self.modo_badge.configure(text=f"● {self.modo_atual}")
-                self.checkboxes_sincronizados = False
 
                 # Mostra/oculta Lucro Total baseado no modo
                 if self.modo_atual == "BACKTEST":
@@ -1478,22 +1555,37 @@ class RSIPanelModern(ctk.CTk):
         Formato do arquivo:
         - Linha 1: comando (ex: PAUSAR, FECHAR_TUDO, SALVAR_CONFIG:...)
         - Linha 2: timestamp (para o EA saber se é comando novo)
+        - Linha 3: identidade única do comando (é ela que volta no eco)
 
         O EA lê, processa e deleta o arquivo de comandos.
 
-        Devolve o timestamp gravado, que serve de protocolo com o robô: ele
-        republica esse mesmo texto no JSON quando lê o comando. Devolve ""
-        se não conseguiu gravar. Gravar não é o mesmo que ser aplicado - quem
-        quiser confirmação de verdade tem que esperar o eco.
+        A linha 3 existe porque o carimbo da linha 2 tem precisão de segundo, e
+        dois comandos no mesmo segundo carregam o mesmo texto. O robô descarta o
+        segundo (carimbo não é mais novo que o do último lido) e o eco que fica
+        publicado é o do primeiro - o painel casava com esse eco alheio e
+        anunciava "aplicado" para um comando jogado fora, com os campos voltando
+        aos valores antigos logo em seguida. Com identidade própria, eco de um
+        comando nunca mais confirma outro.
+
+        Devolve {'id', 'ts'} do que foi gravado, ou {} se não conseguiu gravar.
+        Gravar não é o mesmo que ser aplicado - quem quiser confirmação de
+        verdade tem que esperar o eco.
         """
         try:
-            timestamp = datetime.now().strftime("%Y.%m.%d %H:%M:%S")
+            # A pasta e o canal do robô podem ter mudado depois que o painel
+            # abriu. Reconferir aqui é o que impede o comando de nascer órfão
+            # numa Common/Files que ninguém mais lê.
+            self._sincronizar_destino(forcar=True)
+
+            agora = datetime.now()
+            timestamp = agora.strftime("%Y.%m.%d %H:%M:%S")
+            ident = agora.strftime("%Y%m%d%H%M%S%f")
             with open(self.command_file, "w", encoding="utf-8") as f:
-                f.write(f"{comando}\n{timestamp}")
-            return timestamp
+                f.write(f"{comando}\n{timestamp}\n{ident}")
+            return {'id': ident, 'ts': timestamp}
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao enviar comando: {e}")
-            return ""
+            return {}
 
     def _pausar_retomar(self):
         self._enviar_comando("PAUSAR")
@@ -1877,8 +1969,8 @@ class RSIPanelModern(ctk.CTk):
             pares[chave] = opcoes.get(menu.get(), 0)
 
         comando = "SALVAR_CONFIG:" + ";".join(f"{k}={v}" for k, v in pares.items())
-        timestamp = self._enviar_comando(comando)
-        if not timestamp:
+        enviado = self._enviar_comando(comando)
+        if not enviado:
             return
 
         # Gravar o arquivo nao é aplicar. Quem aplica é o robô, e ele pode nem
@@ -1886,9 +1978,13 @@ class RSIPanelModern(ctk.CTk):
         # campos voltarem aos valores antigos 250 ms depois. Agora o painel
         # espera o robô devolver o eco antes de dizer qualquer coisa.
         self.confirmacao_pendente = {
-            'ts': timestamp,
+            'ts': enviado['id'],
             'enviados': len(pares),
             'prazo': time.monotonic() + self.TEMPO_CONFIRMACAO,
+            # guarda o arquivo de verdade: se o painel migrar de pasta antes do
+            # prazo, a prova de "ninguém leu" continua sendo o arquivo que este
+            # salvamento gravou, não o da pasta nova.
+            'arquivo': self.command_file,
         }
         self._avisar_config(f"→ {len(pares)} parâmetros enviados, aguardando o robô...",
                             self.colors['accent_yellow'], 0)
@@ -1897,9 +1993,11 @@ class RSIPanelModern(ctk.CTk):
         """
         Fecha o ciclo do salvamento com a resposta do robô, não com a do painel.
 
-        O robô republica no JSON o timestamp do comando que leu (ultimo_comando_ts)
-        e quantos parâmetros aceitou (ultimo_comando_qtd). Casar esse eco com o
-        que foi enviado é a única prova de que o comando chegou.
+        O robô republica no JSON a identidade do comando que leu
+        (ultimo_comando_ts) e quantos parâmetros aceitou (ultimo_comando_qtd).
+        Casar esse eco com o que foi enviado é a única prova de que o comando
+        chegou. A identidade é única por comando: eco de um nunca confirma outro,
+        nem quando os dois saem no mesmo segundo.
 
         Passado o prazo sem eco, o arquivo de comando ainda em disco é a prova do
         contrário: o robô apaga o arquivo assim que lê, então se ele continua lá
@@ -1922,7 +2020,7 @@ class RSIPanelModern(ctk.CTk):
 
         self.confirmacao_pendente = None
 
-        if os.path.exists(self.command_file):
+        if os.path.exists(pendente.get('arquivo', self.command_file)):
             self._avisar_config("✗ o robô não leu o comando — ele está rodando?",
                                 self.colors['accent_red'], 8)
         elif dados and 'ultimo_comando_ts' not in dados:
@@ -2084,6 +2182,7 @@ class RSIPanelModern(ctk.CTk):
             ("Modo:", self.modo_atual, self.colors['accent_purple']
              if self.modo_atual == "BACKTEST" else self.colors['accent_cyan']),
             ("Arquivo:", f"rsi_data_{self.modo_atual}.json", self.colors['text_secondary']),
+            ("Pasta:", self._rotulo_pasta(), self.colors['text_secondary']),
             ("Atualizado:", self.ultimo_timestamp or "aguardando", self.colors['text_secondary']),
         ]
 

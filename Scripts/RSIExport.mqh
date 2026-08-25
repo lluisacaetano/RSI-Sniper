@@ -11,6 +11,11 @@
 
 #include <Trade/Trade.mqh>
 
+// Quanto tempo um comando do painel continua valendo. Cinco minutos cobrem com
+// folga o caso legitimo (o painel manda enquanto o EA ainda esta carregando) e
+// nao deixam comando esquecido na pasta virar armadilha para a proxima sessao.
+#define VALIDADE_COMANDO_SEG 300
+
 //+------------------------------------------------------------------+
 //| Configurações do EA em struct para facilitar passagem de dados   |
 //| O painel pode modificar esses valores em tempo real              |
@@ -308,11 +313,18 @@ public:
 
       string comando = linhas[0];
       string timestamp_str = linhas[1];
+      // Linha 3 (opcional): identidade unica do comando. O carimbo da linha 2 so
+      // tem precisao de segundo, entao dois comandos no mesmo segundo carregam o
+      // mesmo texto - e o eco de um confirmava o outro no painel. Painel antigo
+      // nao manda esta linha: ai o eco continua sendo o carimbo.
+      string ident = (num_linhas >= 3) ? linhas[2] : "";
 
       StringTrimLeft(comando);
       StringTrimRight(comando);
       StringTrimLeft(timestamp_str);
       StringTrimRight(timestamp_str);
+      StringTrimLeft(ident);
+      StringTrimRight(ident);
 
       if(comando == "" || timestamp_str == "") {
          FileDelete(arquivo_comandos, FILE_COMMON);
@@ -321,7 +333,24 @@ public:
 
       datetime timestamp_comando = StringToTime(timestamp_str);
 
-      if(timestamp_comando <= ultimo_comando_lido) {
+      // Comando velho nao e para este robo. Sem esta janela, um arquivo esquecido
+      // na Common/Files vale para sempre: um PARAR_EA de 19/08 ficou armado na
+      // pasta e desligaria sozinho o proximo robo que subisse ali, dias depois,
+      // sem motivo visivel na tela. A janela e larga o bastante para o caso
+      // legitimo - o painel manda enquanto o EA ainda esta carregando.
+      // No testador o relogio e o do periodo simulado (2025), muito atras do
+      // relogio do painel, entao a diferenca da negativa e o comando passa.
+      if(!MQLInfoInteger(MQL_TESTER) &&
+         TimeLocal() - timestamp_comando > VALIDADE_COMANDO_SEG) {
+         FileDelete(arquivo_comandos, FILE_COMMON);
+         return "";
+      }
+
+      // Estritamente menor: o arquivo e apagado assim que lido, entao um
+      // comando novo no MESMO segundo do anterior e um comando legitimo, nao
+      // repeticao. Com <= aqui ele era descartado calado - e era esse o
+      // salvamento que "voltava sozinho" para os valores antigos.
+      if(timestamp_comando < ultimo_comando_lido) {
          // Apaga tambem quando ignora. Sem isso o arquivo fica parado na pasta
          // para sempre e o painel nao consegue distinguir "o robo ja tratou"
          // de "o robo nunca leu".
@@ -330,7 +359,9 @@ public:
       }
 
       ultimo_comando_lido = timestamp_comando;
-      ultimo_comando_ts = timestamp_str;   // eco para o painel casar com o que enviou
+      // Eco para o painel casar com o que enviou: a identidade quando o painel
+      // manda uma, o carimbo quando e painel antigo.
+      ultimo_comando_ts = (ident != "") ? ident : timestamp_str;
 
       FileDelete(arquivo_comandos, FILE_COMMON);
 

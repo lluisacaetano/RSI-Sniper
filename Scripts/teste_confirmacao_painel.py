@@ -88,6 +88,37 @@ checa("valor digitado sobreviveu ao ciclo", app.entries['sl'].get(), "999")
 
 app.confirmacao_pendente = None
 
+print("\n=== 6. dois comandos no mesmo segundo nao podem virar confirmacao falsa ===")
+# O robo descarta comando cujo carimbo nao e mais novo que o do ultimo lido. Se o
+# painel carimba so ate o segundo, o segundo salvamento dentro do mesmo segundo e
+# jogado fora - e o eco que sobra no JSON e o do comando ANTERIOR. Casar com ele
+# faz o painel anunciar sucesso de um comando que o robo nunca aplicou, e os
+# campos voltam aos valores antigos. Foi o defeito relatado.
+publica_json(ultimo_comando_ts="", ultimo_comando_qtd=0)
+app._salvar_config()                      # primeiro salvamento
+primeiro = app.confirmacao_pendente['ts']
+os.remove(app.command_file)               # robo leu e aplicou
+publica_json(ultimo_comando_ts=primeiro, ultimo_comando_qtd=25)
+app._conferir_confirmacao(json.loads(pathlib.Path(app.data_file).read_text()))
+
+app.entries['sl'].delete(0, 'end'); app.entries['sl'].insert(0, "888")
+app._salvar_config()                      # segundo salvamento, mesmo segundo
+segundo = app.confirmacao_pendente['ts']
+checa("cada comando tem identidade propria", str(segundo != primeiro), "True")
+
+# o robo descartou o segundo: apagou o arquivo e manteve o eco do primeiro
+os.remove(app.command_file)
+publica_json(stoploss=200, ultimo_comando_ts=primeiro, ultimo_comando_qtd=25)
+app.confirmacao_pendente['prazo'] = time.monotonic() - 1
+app._conferir_confirmacao(json.loads(pathlib.Path(app.data_file).read_text()))
+app.update()
+ok = "aplicou" not in aviso()
+print(("  PASSOU  " if ok else "  FALHOU  ") + "nao anuncia sucesso com eco alheio")
+if not ok:
+    print(f"            painel disse: {aviso()!r}")
+    falhas.append("confirmacao falsa")
+app.confirmacao_pendente = None
+
 print("\n" + ("TODOS PASSARAM" if not falhas else f"FALHAS: {falhas}"))
 app.destroy()
 sys.exit(1 if falhas else 0)
