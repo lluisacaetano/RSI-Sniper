@@ -232,12 +232,14 @@ class RSISniperInstaller:
 
         print("PASSO 2: Crie as pastas (se nao existirem):")
         print("         MQL5/Experts/MWM/")
-        print("         MQL5/Include/MWM/\n")
+        print("         MQL5/Include/MWM/")
+        print("         MQL5/Profiles/Tester/\n")
 
         print("PASSO 3: Copie os arquivos da pasta 'Scripts/':")
         print("         RSI_Sniper.mq5  ->  MQL5/Experts/MWM/")
         print("         RSIExport.mqh   ->  MQL5/Include/MWM/")
-        print("         rsi_panel.py    ->  MQL5/Include/MWM/\n")
+        print("         rsi_panel.py    ->  MQL5/Include/MWM/")
+        print("         referencia.set  ->  MQL5/Profiles/Tester/\n")
 
         print("PASSO 4: Compile no MetaEditor")
         print("         Abra o MetaEditor (F4 no MT5)")
@@ -253,6 +255,10 @@ class RSISniperInstaller:
         pastas = [
             self.mql5_path / "Experts/MWM",
             self.mql5_path / "Include/MWM",
+            # E aqui que o testador de estrategia procura os presets no botao
+            # Carregar. Sem o preset instalado, o backtest do manual nao
+            # reproduz os numeros: ele roda com os padroes do robo.
+            self.mql5_path / "Profiles/Tester",
         ]
 
         for pasta in pastas:
@@ -281,6 +287,7 @@ class RSISniperInstaller:
             'RSI_Sniper.mq5': self.mql5_path / "Experts/MWM",
             'RSIExport.mqh': self.mql5_path / "Include/MWM",
             'rsi_panel.py': self.mql5_path / "Include/MWM",
+            'referencia.set': self.mql5_path / "Profiles/Tester",
         }
 
         arquivos_copiados = 0
