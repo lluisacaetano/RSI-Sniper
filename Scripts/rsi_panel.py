@@ -2261,7 +2261,7 @@ class RSIPanelModern(ctk.CTk):
         criar_item(sec, "Status", "ATIVO = robô operando | PAUSADO = operações bloqueadas")
         criar_item(sec, "Ativo", "Símbolo do ativo sendo negociado (ex: WINM26, WDOJ26)")
         criar_item(sec, "Posições", "Quantidade de posições abertas no momento")
-        criar_item(sec, "RSI", "Índice de Força Relativa (0-100). Abaixo de 30 = sobrevenda, Acima de 70 = sobrecompra")
+        criar_item(sec, "RSI", "Índice de Força Relativa (0-100). Sobrevenda e sobrecompra são os níveis que você define nas Configurações, não 30 e 70 fixos")
         criar_item(sec, "Lucro do Dia", "Lucro/prejuízo realizado + flutuante do dia atual")
         criar_item(sec, "Saldo", "Saldo inicial + lucro realizado (sem lucro flutuante)")
         criar_item(sec, "Lucro Aberto", "Lucro/prejuízo das posições abertas (não realizado)")
@@ -2275,7 +2275,7 @@ class RSIPanelModern(ctk.CTk):
         criar_item(sec, "Direção", "COMPRA = fluxo comprador dominante | VENDA = fluxo vendedor | NEUTRO = equilibrado")
         criar_item(sec, "Filtro", "Quando ativado, só opera se a direção do fluxo confirmar o sinal do RSI")
         criar_item(sec, "Janela (seg)", "Quantos segundos de fluxo o robô soma antes de decidir. Menor = mais reativo")
-        criar_item(sec, "Volume mín.", "Contratos mínimos na janela para o fluxo valer. Abaixo disso o filtro ignora")
+        criar_item(sec, "Volume mín.", "Contratos mínimos na janela para o fluxo valer. Abaixo disso a direção vira NEUTRO e a entrada é barrada")
         criar_item(sec, "Confirmação", "Fração de um lado para confirmar a direção. 0,70 = 70% do volume num sentido")
         ctk.CTkFrame(sec, height=10, fg_color="transparent").pack()
 
@@ -2284,11 +2284,11 @@ class RSIPanelModern(ctk.CTk):
         criar_item(sec, "POC", "Point of Control - preço com maior volume negociado (região de equilíbrio)")
         criar_item(sec, "VAH", "Value Area High - limite superior da área de valor (70% do volume)")
         criar_item(sec, "VAL", "Value Area Low - limite inferior da área de valor (70% do volume)")
-        criar_item(sec, "Zona", "ACIMA_POC = preço acima do POC | ABAIXO_POC = preço abaixo | NA_POC = no POC")
-        criar_item(sec, "Filtro", "Quando ativado, usa a zona do VP como confirmação adicional para entradas")
+        criar_item(sec, "Zona", "ACIMA DO POC | ABAIXO DO POC | NO POC (dentro da margem)")
+        criar_item(sec, "Filtro", "Quando ativado, não compra com o preço ACIMA do POC nem vende com o preço ABAIXO dele. Dentro da margem não barra nada")
         criar_item(sec, "Candles", "Quantos candles entram no cálculo do perfil de volume")
         criar_item(sec, "Agrupamento", "Ticks por faixa de preço. Maior = perfil mais grosso e mais rápido de montar")
-        criar_item(sec, "Zona do POC", "Pontos em torno do POC tratados como região neutra")
+        criar_item(sec, "Zona do POC", "Pontos em torno do POC onde o preço conta como em equilíbrio. Aumentar alarga a faixa e deixa passar MAIS entradas")
         ctk.CTkFrame(sec, height=10, fg_color="transparent").pack()
 
         # ═══ CONFIGURAÇÕES ═══
@@ -2302,7 +2302,7 @@ class RSIPanelModern(ctk.CTk):
 
         sec = criar_secao("📏 VOLATILIDADE (ATR)", self.colors['accent_blue'])
         criar_item(sec, "Movimento", "Tamanho do movimento típico do dia, em pontos, medido pelo ATR")
-        criar_item(sec, "Filtro", "Quando ativado, o stop e o alvo passam a ser calculados pela volatilidade. Stop Loss e Take Profit fixos somem das Configurações porque deixam de valer")
+        criar_item(sec, "Filtro", "Este não barra entrada nenhuma: ativado, o stop e o alvo passam a ser calculados pela volatilidade em vez de pontos fixos. Stop Loss e Take Profit fixos somem das Configurações porque deixam de valer")
         criar_item(sec, "Períodos", "Quantos candles o ATR usa para medir a volatilidade")
         criar_item(sec, "Mult. stop", "Multiplica o ATR para achar a distância do stop. 1,5 = uma vez e meia o movimento normal")
         criar_item(sec, "Mult. alvo", "Multiplica o ATR para achar o alvo. Mantenha maior que o do stop")
@@ -2319,15 +2319,18 @@ class RSIPanelModern(ctk.CTk):
         criar_item(sec, "Sobrecompra", "Nível que o RSI precisa cruzar para baixo para gerar venda")
         criar_item(sec, "Preço", "Qual preço do candle alimenta o RSI: Fechamento, Abertura, Máxima, Mínima, Mediana, Típico ou Ponderado")
         criar_item(sec, "Máx. posições", "Quantas posições o robô pode manter abertas ao mesmo tempo")
-        criar_item(sec, "Salvar", "Envia todos os parâmetros ao robô, que aplica na hora, sem reiniciar")
+        criar_item(sec, "Salvar", "Envia os parâmetros e espera o robô confirmar. Só diz que aplicou quando ele responde, com a contagem que ELE devolveu. Se ninguém leu, avisa em vermelho")
         criar_item(sec, "Resetar", "Devolve todos os parâmetros aos valores com que o robô foi iniciado")
+        criar_item(sec, "Pausar", "Para de abrir operações novas. As abertas continuam, e o stop móvel segue protegendo o lucro delas")
+        criar_item(sec, "Fechar tudo", "Encerra agora, a mercado, todas as posições abertas")
+        criar_item(sec, "Parar EA", "Remove o robô do gráfico E fecha o painel. Para voltar, recoloque o robô no gráfico e reabra o painel")
         ctk.CTkFrame(sec, height=10, fg_color="transparent").pack()
 
         # ═══ ESTRATÉGIA RSI ═══
         sec = criar_secao("📈 ESTRATÉGIA RSI SNIPER", self.colors['accent_yellow'])
         criar_item(sec, "Sinal de COMPRA", "RSI cruza acima do nível de sobrevenda (ex: 30 → 31)")
         criar_item(sec, "Sinal de VENDA", "RSI cruza abaixo do nível de sobrecompra (ex: 70 → 69)")
-        criar_item(sec, "Confirmação", "Filtros de Agressão e Volume Profile refinam os sinais")
+        criar_item(sec, "Confirmação", "Agressão, Volume Profile e Tendência podem barrar o sinal do RSI — um basta. Volatilidade não barra: ela muda o tamanho do stop e do alvo")
         ctk.CTkFrame(sec, height=10, fg_color="transparent").pack()
 
         # Botão fechar
