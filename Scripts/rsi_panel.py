@@ -2241,6 +2241,19 @@ class RSIPanelModern(ctk.CTk):
             ).pack(anchor="w", padx=15, pady=(12, 5))
             return frame
 
+        def criar_frase(parent, texto):
+            """
+            Uma linha em cima de cada bloco dizendo, em portugues corrido, para
+            que ele serve. Quem abre a ajuda no meio de uma duvida le esta linha
+            e ja resolve; a lista de campos abaixo e para quem quer o detalhe.
+            """
+            ctk.CTkLabel(
+                parent, text=texto,
+                font=ctk.CTkFont(size=12, slant="italic"),
+                text_color=self.colors['text_secondary'],
+                wraplength=560, justify="left"
+            ).pack(anchor="w", padx=15, pady=(0, 8))
+
         def criar_item(parent, termo, descricao):
             item_frame = ctk.CTkFrame(parent, fg_color="transparent")
             item_frame.pack(fill="x", padx=15, pady=3)
@@ -2258,6 +2271,7 @@ class RSIPanelModern(ctk.CTk):
 
         # ═══ MONITOR ═══
         sec = criar_secao("📊 MONITOR", self.colors['accent_cyan'])
+        criar_frase(sec, "O que o robô está vendo agora. Tudo aqui é leitura: nada nesta coluna muda o comportamento dele.")
         criar_item(sec, "Status", "ATIVO = robô operando | PAUSADO = operações bloqueadas")
         criar_item(sec, "Ativo", "Símbolo do ativo sendo negociado (ex: WINM26, WDOJ26)")
         criar_item(sec, "Posições", "Quantidade de posições abertas no momento")
@@ -2269,6 +2283,7 @@ class RSIPanelModern(ctk.CTk):
 
         # ═══ AGRESSÃO ═══
         sec = criar_secao("⚡ AGRESSÃO (Fluxo de Ordens)", self.colors['accent_green'])
+        criar_frase(sec, "Só deixa comprar quando os compradores dominam o fluxo naquele instante. Mercado dividido ou parado, ele segura a entrada.")
         criar_item(sec, "Compra %", "Percentual de ordens agressoras de compra no período")
         criar_item(sec, "Venda %", "Percentual de ordens agressoras de venda no período")
         criar_item(sec, "Volume", "Volume total de contratos no período analisado")
@@ -2281,6 +2296,7 @@ class RSIPanelModern(ctk.CTk):
 
         # ═══ VOLUME PROFILE ═══
         sec = criar_secao("📊 VOLUME PROFILE", self.colors['accent_purple'])
+        criar_frase(sec, "Evita comprar o que já subiu além da região onde o mercado negociou de verdade — e vender o que já caiu abaixo dela.")
         criar_item(sec, "POC", "Point of Control - preço com maior volume negociado (região de equilíbrio)")
         criar_item(sec, "VAH", "Value Area High - limite superior da área de valor (70% do volume)")
         criar_item(sec, "VAL", "Value Area Low - limite inferior da área de valor (70% do volume)")
@@ -2293,6 +2309,7 @@ class RSIPanelModern(ctk.CTk):
 
         # ═══ CONFIGURAÇÕES ═══
         sec = criar_secao("📉 TENDÊNCIA (Média Móvel)", self.colors['accent_yellow'])
+        criar_frase(sec, "É o filtro que mais corta sinal: descarta toda entrada contra a maré.")
         criar_item(sec, "Média", "Valor atual da média móvel usada como referência de tendência")
         criar_item(sec, "Mercado", "ALTA = preço acima da média | BAIXA = abaixo dela")
         criar_item(sec, "Filtro", "Quando ativado, só compra acima da média e só vende abaixo. É o filtro que mais barra sinal")
@@ -2301,6 +2318,7 @@ class RSIPanelModern(ctk.CTk):
         ctk.CTkFrame(sec, height=10, fg_color="transparent").pack()
 
         sec = criar_secao("📏 VOLATILIDADE (ATR)", self.colors['accent_blue'])
+        criar_frase(sec, "Os outros três decidem SE entra. Este decide COM QUE FOLGA entra.")
         criar_item(sec, "Movimento", "Tamanho do movimento típico do dia, em pontos, medido pelo ATR")
         criar_item(sec, "Filtro", "Este não barra entrada nenhuma: ativado, o stop e o alvo passam a ser calculados pela volatilidade em vez de pontos fixos. Stop Loss e Take Profit fixos somem das Configurações porque deixam de valer")
         criar_item(sec, "Períodos", "Quantos candles o ATR usa para medir a volatilidade")
@@ -2309,6 +2327,7 @@ class RSIPanelModern(ctk.CTk):
         ctk.CTkFrame(sec, height=10, fg_color="transparent").pack()
 
         sec = criar_secao("⚙️ CONFIGURAÇÕES", self.colors['accent_blue'])
+        criar_frase(sec, "O que dá para mudar com o robô rodando. Salvar envia; quem confirma é o robô.")
         criar_item(sec, "Lote", "Quantidade de contratos/lotes por operação")
         criar_item(sec, "Stop Loss", "Distância em pontos para o stop loss (proteção contra perdas)")
         criar_item(sec, "Take Profit", "Distância em pontos para o take profit (alvo de lucro)")
@@ -2328,6 +2347,7 @@ class RSIPanelModern(ctk.CTk):
 
         # ═══ ESTRATÉGIA RSI ═══
         sec = criar_secao("📈 ESTRATÉGIA RSI SNIPER", self.colors['accent_yellow'])
+        criar_frase(sec, "O RSI propõe a operação. Os filtros decidem se ela vale.")
         criar_item(sec, "Sinal de COMPRA", "RSI cruza acima do nível de sobrevenda (ex: 30 → 31)")
         criar_item(sec, "Sinal de VENDA", "RSI cruza abaixo do nível de sobrecompra (ex: 70 → 69)")
         criar_item(sec, "Confirmação", "Agressão, Volume Profile e Tendência podem barrar o sinal do RSI — um basta. Volatilidade não barra: ela muda o tamanho do stop e do alvo")

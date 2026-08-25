@@ -87,6 +87,79 @@ em vez de fingir sucesso.
 **Deixe o PARAR EA por último.** Ele remove o robô do gráfico *e fecha o painel*.
 Se alguém clicar no meio da demonstração, acabou — precisa recomeçar do passo 3.
 
+## O que dizer em cada bloco
+
+Para cada filtro: **o que mede · a regra · o que aparece na tela**. As frases em
+citação são para falar em voz alta — elas também estão dentro da Ajuda do painel,
+então o texto na tela bate com a sua fala.
+
+### Agressão
+
+- **Mede:** nos últimos *N* segundos, quanto volume entrou comprando e quanto
+  entrou vendendo.
+- **Regra:** um lado precisa ter pelo menos o percentual de confirmação **e** a
+  janela precisa alcançar o volume mínimo. Falhando qualquer uma das duas, a
+  direção fica NEUTRO e a entrada é barrada.
+- **Na tela:** Compra %, Venda %, Volume da janela e Direção.
+
+> "Só deixa comprar quando os compradores dominam o fluxo naquele instante.
+> Mercado dividido ou parado, ele segura a entrada."
+
+### Volume Profile
+
+- **Mede:** entre os últimos 60 candles, qual preço concentrou mais volume — o
+  POC — e os limites da faixa, VAH e VAL.
+- **Regra:** não compra com o preço **acima** do POC; não vende com o preço
+  **abaixo**. Dentro da margem, o preço conta como "no POC" e nada é barrado.
+- **Na tela:** POC, VAH, VAL e a zona atual.
+
+> "Evita comprar o que já subiu além da região onde o mercado negociou de
+> verdade."
+
+### Tendência
+
+- **Mede:** a média móvel de *N* períodos.
+- **Regra:** só compra com o preço acima da média; só vende abaixo.
+- **Na tela:** o valor da média e para que lado ela aponta.
+
+> "É o filtro que mais corta sinal. Está desligado no preset de hoje justamente
+> por isso: nos testes ele barrava mais operação boa do que ruim."
+
+### Volatilidade
+
+- **Mede:** o ATR de *N* períodos — o tamanho do movimento típico do momento.
+- **Regra:** **não barra nada.** Troca o stop e o alvo fixos por ATR ×
+  multiplicador. Por isso os campos Stop Loss e Take Profit **somem** da coluna
+  de configurações quando ele está marcado.
+- **Na tela:** o ATR em pontos.
+
+> "Os outros três decidem SE entra. Este decide COM QUE FOLGA entra."
+
+### As configurações
+
+| campo | o que faz | para que lado empurra |
+|---|---|---|
+| Lote | contratos por operação | multiplica lucro e prejuízo na mesma proporção; não muda nenhuma decisão |
+| Stop Loss | perda máxima aceita, em pontos | maior aguenta mais oscilação contra e custa mais caro quando erra |
+| Take Profit | alvo de ganho, em pontos | maior ganha mais por acerto e o preço chega lá menos vezes |
+| Stop móvel | distância que o stop mantém do preço | menor protege o lucro mais cedo e tira da operação mais rápido |
+| Períodos do RSI | quantos candles entram na conta | menor reage mais rápido e gera mais sinais — e mais ruído |
+| Sobrevenda | nível que, cruzado para cima, gera compra | mais perto de 50, mais compras e menos convicção em cada uma |
+| Sobrecompra | nível que, cruzado para baixo, gera venda | mais perto de 50, mais vendas |
+| Máx. posições | operações abertas ao mesmo tempo | em 1, ele fecha uma antes de abrir outra |
+
+### A ordem na tela
+
+1. **O que o robô está vendo** (esquerda): estado, ativo, RSI agora, resultado do dia.
+2. **O que ele está considerando** (meio): marque um filtro de cada vez e mostre a
+   leitura aparecendo ao vivo. Diga que **o checkbox é o título do bloco** —
+   marcar liga o filtro no robô *e* abre a leitura na tela.
+3. **O que dá para mudar** (direita): altere o Stop Loss, salve, e mostre a
+   confirmação chegando do robô.
+
+> "Repare que quem contou os 25 parâmetros foi o **robô**, não o painel. Se ele
+> estivesse parado, esta tela diria que ninguém leu — ela não finge que deu certo."
+
 ## Se algo der errado
 
 | sintoma | causa | o que fazer |
