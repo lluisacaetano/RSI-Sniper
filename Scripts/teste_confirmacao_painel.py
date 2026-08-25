@@ -42,7 +42,7 @@ print("\n=== 1. salvar nao pode mais anunciar sucesso sozinho ===")
 publica_json(ultimo_comando_ts="", ultimo_comando_qtd=0)
 app._salvar_config()
 app.update()
-checa("mostra que esta aguardando o robo", aviso(), "aguardando o robô")
+checa("mostra que esta aguardando o robo", aviso(), "aguardando confirmação do robô")
 pend = app.confirmacao_pendente
 assert pend, "deveria haver confirmacao pendente"
 print(f"            (enviou {pend['enviados']} parametros, ts={pend['ts']})")
@@ -54,18 +54,18 @@ publica_json(ultimo_comando_ts=pend['ts'], ultimo_comando_qtd=25)
 app._atualizar_dados_uma_vez = None
 app._conferir_confirmacao(json.loads(pathlib.Path(app.data_file).read_text()))
 app.update()
-checa("confirma com o numero do robo", aviso(), "robô aplicou 25 parâmetros")
+checa("confirma com o numero do robo", aviso(), "25 parâmetros confirmados pelo robô")
 checa("pendencia foi encerrada", str(app.confirmacao_pendente), "None")
 
 print("\n=== 3. robo parado: arquivo fica em disco e o painel denuncia ===")
 publica_json(ultimo_comando_ts="", ultimo_comando_qtd=0)
 app._salvar_config()
 app.update()
-checa("volta a aguardar", aviso(), "aguardando o robô")
+checa("volta a aguardar", aviso(), "aguardando confirmação do robô")
 app.confirmacao_pendente['prazo'] = time.monotonic() - 1     # estoura o prazo
 app._conferir_confirmacao(json.loads(pathlib.Path(app.data_file).read_text()))
 app.update()
-checa("avisa que o robo nao leu", aviso(), "não leu o comando")
+checa("avisa que o robo nao leu", aviso(), "o comando não foi lido")
 
 print("\n=== 4. robo de versao antiga: consumiu o arquivo, mas nao ecoa ===")
 publica_json()                                    # JSON sem as chaves de eco
@@ -112,7 +112,7 @@ publica_json(stoploss=200, ultimo_comando_ts=primeiro, ultimo_comando_qtd=25)
 app.confirmacao_pendente['prazo'] = time.monotonic() - 1
 app._conferir_confirmacao(json.loads(pathlib.Path(app.data_file).read_text()))
 app.update()
-ok = "aplicou" not in aviso()
+ok = "Configuração aplicada" not in aviso()
 print(("  PASSOU  " if ok else "  FALHOU  ") + "nao anuncia sucesso com eco alheio")
 if not ok:
     print(f"            painel disse: {aviso()!r}")

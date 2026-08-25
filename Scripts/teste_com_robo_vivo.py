@@ -145,7 +145,7 @@ for chave, (menu, opcoes) in app.menus_param.items():
     menu.set(novo); menus_alvo[chave] = opcoes[novo]
 aviso = salva_e_espera()
 print(f"  painel disse: {aviso}")
-checa("robo confirmou o salvamento", "aplicou" in aviso, aviso)
+checa("robo confirmou o salvamento", "Configuração aplicada" in aviso, aviso)
 
 exige_robo_vivo("conferencia dos 25")
 dados = le_json()

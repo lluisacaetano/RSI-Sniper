@@ -1584,19 +1584,28 @@ class RSIPanelModern(ctk.CTk):
                 f.write(f"{comando}\n{timestamp}\n{ident}")
             return {'id': ident, 'ts': timestamp}
         except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao enviar comando: {e}")
+            messagebox.showerror(
+                "Falha ao enviar comando",
+                f"Não foi possível gravar o arquivo de comando.\n\nDetalhe: {e}")
             return {}
 
     def _pausar_retomar(self):
         self._enviar_comando("PAUSAR")
 
     def _fechar_tudo(self):
-        if messagebox.askyesno("Confirmar", "Fechar todas as posições?"):
+        if messagebox.askyesno(
+                "Fechar posições",
+                "Todas as posições abertas serão encerradas a mercado, agora.\n\n"
+                "Deseja continuar?"):
             self._enviar_comando("FECHAR_TUDO")
 
     def _parar_ea(self):
         """Para o EA no MetaTrader e fecha o painel."""
-        if messagebox.askyesno("Parar EA", "Isso vai remover o EA do gráfico e fechar o painel.\n\nDeseja continuar?"):
+        if messagebox.askyesno(
+                "Parar o robô",
+                "O robô será removido do gráfico e este painel será fechado.\n\n"
+                "Para retomar, coloque o robô no gráfico novamente e reabra o "
+                "painel.\n\nDeseja continuar?"):
             self._enviar_comando("PARAR_EA")
             self.after(500, self.destroy)  # Aguarda 500ms para o comando ser enviado
 
@@ -1927,8 +1936,10 @@ class RSIPanelModern(ctk.CTk):
                 'usar_atr':          1 if self.atr_var.get() else 0,
             }
         except ValueError:
-            messagebox.showerror("Valor inválido",
-                                 "Lote, stop, alvo e stop móvel precisam ser números.")
+            messagebox.showerror(
+                "Valor inválido",
+                "Os campos Lote, Stop Loss, Take Profit e Stop móvel devem conter "
+                "apenas números.\n\nNenhum parâmetro foi enviado ao robô.")
             return
 
         for chave, campo in self.entries_param.items():
@@ -1939,8 +1950,10 @@ class RSIPanelModern(ctk.CTk):
                 pares[chave] = float(texto)
             except ValueError:
                 lim = self.LIMITES.get(chave)
-                messagebox.showerror("Valor inválido",
-                                     f"{lim[3] if lim else chave} precisa ser um número.")
+                messagebox.showerror(
+                    "Valor inválido",
+                    f"O campo {lim[3] if lim else chave} deve conter apenas números."
+                    "\n\nNenhum parâmetro foi enviado ao robô.")
                 return
 
         # Faixa aceita: barra aqui, antes de chegar no robo
@@ -1951,18 +1964,24 @@ class RSIPanelModern(ctk.CTk):
             minimo, maximo, inteiro, nome = lim
             if valor < minimo or valor > maximo:
                 messagebox.showerror(
-                    "Fora da faixa",
-                    f"{nome} aceita de {minimo} a {maximo}.\nVocê digitou {valor:g}.")
+                    "Valor fora da faixa",
+                    f"O campo {nome} aceita valores entre {minimo} e {maximo}.\n"
+                    f"Valor informado: {valor:g}.\n\nNenhum parâmetro foi enviado ao robô.")
                 return
             if inteiro and float(valor) != int(valor):
-                messagebox.showerror("Valor inválido", f"{nome} precisa ser um número inteiro.")
+                messagebox.showerror(
+                    "Valor inválido",
+                    f"O campo {nome} aceita apenas números inteiros."
+                    "\n\nNenhum parâmetro foi enviado ao robô.")
                 return
 
         if pares.get("rsi_os", 0) >= pares.get("rsi_ob", 100):
             messagebox.showerror(
-                "Níveis invertidos",
-                "A sobrevenda precisa ser menor que a sobrecompra.\n"
-                f"Você colocou {pares.get('rsi_os'):g} e {pares.get('rsi_ob'):g}.")
+                "Níveis inconsistentes",
+                "O nível de sobrevenda deve ser menor que o de sobrecompra.\n"
+                f"Valores informados: sobrevenda {pares.get('rsi_os'):g}, "
+                f"sobrecompra {pares.get('rsi_ob'):g}.\n\n"
+                "Nenhum parâmetro foi enviado ao robô.")
             return
 
         for chave, (menu, opcoes) in self.menus_param.items():
@@ -1986,7 +2005,7 @@ class RSIPanelModern(ctk.CTk):
             # salvamento gravou, não o da pasta nova.
             'arquivo': self.command_file,
         }
-        self._avisar_config(f"→ {len(pares)} parâmetros enviados, aguardando o robô...",
+        self._avisar_config(f"{len(pares)} parâmetros enviados · aguardando confirmação do robô",
                             self.colors['accent_yellow'], 0)
 
     def _conferir_confirmacao(self, dados):
@@ -2011,7 +2030,7 @@ class RSIPanelModern(ctk.CTk):
         if dados.get('ultimo_comando_ts') == pendente['ts']:
             quantos = dados.get('ultimo_comando_qtd') or pendente['enviados']
             self.confirmacao_pendente = None
-            self._avisar_config(f"✓ robô aplicou {quantos} parâmetros",
+            self._avisar_config(f"Configuração aplicada · {quantos} parâmetros confirmados pelo robô",
                                 self.colors['accent_green'])
             return
 
@@ -2021,25 +2040,30 @@ class RSIPanelModern(ctk.CTk):
         self.confirmacao_pendente = None
 
         if os.path.exists(pendente.get('arquivo', self.command_file)):
-            self._avisar_config("✗ o robô não leu o comando — ele está rodando?",
+            self._avisar_config("Não aplicado · o comando não foi lido. Verifique se o robô está em execução",
                                 self.colors['accent_red'], 8)
         elif dados and 'ultimo_comando_ts' not in dados:
             # Robô de versão anterior: consome o arquivo mas não sabe ecoar.
             # Só vale afirmar isso com JSON na mão; sem dado nenhum cai no else.
             self._avisar_config(
-                f"✓ robô leu os {pendente['enviados']} parâmetros "
-                "(recompile o EA para ver a contagem dele)",
+                f"Configuração recebida · {pendente['enviados']} parâmetros enviados. "
+                "Esta versão do robô não informa a contagem aplicada; recompile o EA "
+                "para a confirmação completa",
                 self.colors['accent_green'], 6)
         else:
-            self._avisar_config("✗ o robô leu mas não confirmou o salvamento",
+            self._avisar_config("Não confirmado · o robô leu o comando, mas não confirmou a aplicação",
                                 self.colors['accent_red'], 8)
 
     def _resetar_config(self):
-        if messagebox.askyesno("Confirmar", "Resetar para valores originais?"):
+        if messagebox.askyesno(
+                "Restaurar configuração inicial",
+                "Todos os parâmetros voltarão aos valores com que o robô foi "
+                "iniciado.\n\nDeseja continuar?"):
             self._enviar_comando("RESETAR_CONFIG")
             # Força re-sincronização dos checkboxes e campos na próxima atualização
             self.checkboxes_sincronizados = False
-            self._avisar_config("↺ Configurações resetadas", self.colors['accent_yellow'], 2)
+            self._avisar_config("Reset solicitado · aguardando o robô restaurar os valores iniciais",
+                                self.colors['accent_yellow'], 3)
 
     def _preparar_card_rolavel(self, area):
         """
@@ -2338,7 +2362,7 @@ class RSIPanelModern(ctk.CTk):
         criar_item(sec, "Sobrecompra", "Nível que o RSI precisa cruzar para baixo para gerar venda")
         criar_item(sec, "Preço", "Qual preço do candle alimenta o RSI: Fechamento, Abertura, Máxima, Mínima, Mediana, Típico ou Ponderado")
         criar_item(sec, "Máx. posições", "Quantas posições o robô pode manter abertas ao mesmo tempo")
-        criar_item(sec, "Salvar", "Envia os parâmetros e espera o robô confirmar. Só diz que aplicou quando ele responde, com a contagem que ELE devolveu. Se ninguém leu, avisa em vermelho")
+        criar_item(sec, "Salvar", "Envia os parâmetros e aguarda a confirmação do robô. A barra mostra 'aguardando confirmação do robô' e só troca para 'Configuração aplicada' quando ele responde, com a contagem que ELE devolveu. Se ninguém leu, avisa em vermelho")
         criar_item(sec, "Resetar", "Devolve todos os parâmetros aos valores com que o robô foi iniciado")
         criar_item(sec, "Pausar", "Para de abrir operações novas. As abertas continuam, e o stop móvel segue protegendo o lucro delas")
         criar_item(sec, "Fechar tudo", "Encerra agora, a mercado, todas as posições abertas")
