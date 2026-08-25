@@ -67,7 +67,7 @@ bool g_log_buffer_initialized = false;
 //+------------------------------------------------------------------+
 void LogMsg(ENUM_LOG_LEVEL level, string message) {
    // Verifica se deve logar baseado no nível configurado
-   if(level > LogDetalhado)
+   if(level > cfg.log_nivel)
       return;
 
    // Nome do nível
@@ -139,50 +139,76 @@ void LogMsg(ENUM_LOG_LEVEL level, string message) {
 //| PARAMETROS DE ENTRADA                                            |
 //+------------------------------------------------------------------+
 
-input group "=== RSI ==="
-input int RSI_Period = 14;
-input ENUM_APPLIED_PRICE RSI_Price = PRICE_CLOSE;
-input double RSI_Oversold = 40.0;    // 40 = Mais sinais de compra (oversold)
-input double RSI_Overbought = 60.0;  // 60 = Mais sinais de venda (overbought)
+input group "RSI (Índice de Força Relativa)"
+input int RSI_Period = 14;                        // Períodos do RSI (candles usados no cálculo)
+input ENUM_APPLIED_PRICE RSI_Price = PRICE_CLOSE; // Preço do candle usado no cálculo do RSI
+input double RSI_Oversold = 40.0;                 // Nível de sobrevenda: cruzar para cima gera compra
+input double RSI_Overbought = 60.0;               // Nível de sobrecompra: cruzar para baixo gera venda
 
-input group "=== AGRESSAO (Fluxo de Ordens) ==="
-input bool UsarAgressao = false;     // Inicia DESATIVADO para simplificar testes
-input int Agressao_JanelaSeg = 1;              // Rodrigo recomenda 1 segundo
-input double Agressao_VolumeMinimo = 500;      // Volume minimo significativo
-input double Agressao_PctMinimo = 0.70;        // 70% para confirmar direcao
+input group "Filtro de Agressão (fluxo de ordens)"
+input bool UsarAgressao = false;                  // Ativar filtro de agressão (exige fluxo em tempo real)
+input int Agressao_JanelaSeg = 1;                 // Janela de leitura do fluxo (segundos)
+input double Agressao_VolumeMinimo = 500;         // Volume mínimo na janela para o fluxo valer (contratos)
+input double Agressao_PctMinimo = 0.70;           // Percentual de um lado para confirmar a direção (0,70 = 70%)
 
-input group "=== VOLUME PROFILE ==="
-input bool UsarVolumeProfile = false;  // Inicia DESATIVADO para simplificar testes
-input int VP_Barras = 60;
-input int VP_PassoTicks = 5;
-input double VP_MargemPOC = 10;
+input group "Filtro de Volume Profile (POC)"
+input bool UsarVolumeProfile = false;             // Ativar filtro de Volume Profile
+input int VP_Barras = 60;                         // Candles usados para montar o perfil de volume
+input int VP_PassoTicks = 5;                      // Agrupamento do perfil (ticks por faixa de preço)
+input double VP_MargemPOC = 10;                   // Zona neutra em torno do POC (pontos)
 
-input group "=== GERENCIAMENTO DE RISCO ==="
-input double LotSize = 1.0;
-input double TakeProfit_Points = 350;
-input double StopLoss_Points = 200;
-input bool UseTrailingStop = true;
-input double TrailingStop_Points = 150;
+input group "Filtro de Tendência (média móvel)"
+input bool UsarFiltroTendencia = false;           // Ativar filtro de tendência (só compra acima da média)
+input int MM_Periodo = 50;                        // Períodos da média móvel de tendência
+input ENUM_MA_METHOD MM_Metodo = MODE_EMA;        // Método de cálculo da média móvel
 
-input group "=== CONTROLE ==="
-input int MaxPositions = 1;
-input ulong MagicNumber = 123456;  // Numero magico para identificar ordens do EA
-input ENUM_LOG_LEVEL LogDetalhado = LOG_INFO;  // Nivel de log: NONE, ERROR, INFO, DEBUG
+input group "Stop e Alvo por Volatilidade (ATR)"
+input bool UsarATR = false;                       // Calcular stop e alvo pela volatilidade, não por pontos fixos
+input int ATR_Periodo = 14;                       // Períodos do ATR
+input double ATR_Mult_SL = 1.5;                   // Multiplicador do ATR para o stop loss
+input double ATR_Mult_TP = 3.0;                   // Multiplicador do ATR para o take profit
 
-input group "=== PAINEL EXTERNO ==="
-input bool UsarPainelExterno = true;
-input uint IntervaloExportacao_MS = 500;  // Throttle de exportacao (ms)
+input group "Gerenciamento de Risco"
+input double LotSize = 1.0;                       // Volume por operação (contratos)
+input double TakeProfit_Points = 350;             // Take profit: alvo de ganho (pontos)
+input double StopLoss_Points = 200;               // Stop loss: perda máxima por operação (pontos)
+input bool UseTrailingStop = true;                // Ativar stop móvel (acompanha o preço a favor)
+input double TrailingStop_Points = 150;           // Distância do stop móvel até o preço (pontos)
+
+input group "Controle de Execução"
+input int MaxPositions = 1;                       // Máximo de posições abertas ao mesmo tempo
+input ulong MagicNumber = 123456;                 // Número que identifica as ordens deste robô
+input ENUM_LOG_LEVEL LogDetalhado = LOG_INFO;     // Nível de detalhe do diário de execução
+
+input group "Painel Externo"
+input bool UsarPainelExterno = true;              // Exportar dados para o painel de controle
+input uint IntervaloExportacao_MS = 500;          // Intervalo entre exportações para o painel (ms)
 
 //+------------------------------------------------------------------+
 //| VARIAVEIS GLOBAIS                                                |
 //+------------------------------------------------------------------+
 
+// Parametros com que cada indicador foi criado, para saber quando recriar
+int  ind_rsi_period = -1, ind_rsi_price = -1;
+int  ind_mm_periodo = -1, ind_mm_metodo = -1;
+int  ind_atr_periodo = -1;
+
+
 CTrade trade;
 int rsi_handle;
 double rsi_buffer[];
+int mm_handle  = INVALID_HANDLE;   // media movel do filtro de tendencia
+int atr_handle = INVALID_HANDLE;   // ATR do stop por volatilidade
+double mm_buffer[];
+double atr_buffer[];
+double g_mm_valor  = 0;            // ultimos valores lidos, tambem exportados ao painel
+double g_atr_valor = 0;
+string g_tendencia = "";           // "ALTA", "BAIXA" ou "" quando o filtro esta desligado
 bool buy_signal_sent = false;
 bool sell_signal_sent = false;
 bool aguardando_entrada = false;  // Bloqueia novas entradas enquanto ordem está pendente
+datetime aguardando_desde = 0;    // Quando a trava acima foi ligada
+#define AGUARDA_ENTRADA_SEG 10    // Tempo maximo que a trava pode ficar ligada
 // Configuracoes do EA (usando struct do RSIExport)
 SRSIConfig cfg;           // Configuracoes atuais (modificaveis pelo painel)
 SRSIConfig cfg_original;  // Configuracoes originais (para resetar)
@@ -218,7 +244,7 @@ AgressaoData CalcularAgressao() {
    AgressaoData a;
    a.ok = false;
    a.nTicks = 0;
-   a.janelaSeg = Agressao_JanelaSeg;
+   a.janelaSeg = cfg.agr_janela;
    a.volumeTotal = 0.0;
    a.volumeCompra = 0.0;
    a.volumeVenda = 0.0;
@@ -227,7 +253,7 @@ AgressaoData CalcularAgressao() {
    a.direcao = "NEUTRO";
 
    datetime t2 = TimeTradeServer();
-   datetime t1 = t2 - (datetime)Agressao_JanelaSeg;
+   datetime t1 = t2 - (datetime)cfg.agr_janela;
    if(t1 <= 0) t1 = t2 - 1;
 
    MqlTick ticks[];
@@ -279,9 +305,9 @@ AgressaoData CalcularAgressao() {
    a.pctCompra = buyVol / total;
    a.pctVenda = sellVol / total;
 
-   if(a.pctCompra >= Agressao_PctMinimo && a.volumeTotal >= Agressao_VolumeMinimo)
+   if(a.pctCompra >= cfg.agr_pctmin && a.volumeTotal >= cfg.agr_volmin)
       a.direcao = "COMPRA";
-   else if(a.pctVenda >= Agressao_PctMinimo && a.volumeTotal >= Agressao_VolumeMinimo)
+   else if(a.pctVenda >= cfg.agr_pctmin && a.volumeTotal >= cfg.agr_volmin)
       a.direcao = "VENDA";
    else
       a.direcao = "NEUTRO";
@@ -293,13 +319,17 @@ AgressaoData CalcularAgressao() {
 //| Funcoes auxiliares do Volume Profile                             |
 //+------------------------------------------------------------------+
 double PriceStep() {
-   return _Point * (double)MathMax(1, VP_PassoTicks);
+   return _Point * (double)MathMax(1, cfg.vp_passo);
 }
 
+// Converte preco <-> indice de faixa do perfil. O Volume Profile agrupa os
+// ticks em faixas de largura step (cfg.vp_passo), e indexa o array direto por
+// esse numero, o que da acesso O(1) em vez de varrer o perfil a cada tick.
 long PriceToIndex(double price, double step) {
    return (long)MathRound(price / step);
 }
 
+// Volta do indice da faixa para o preco no centro dela.
 double IndexToPrice(long idx, double step) {
    return (double)idx * step;
 }
@@ -318,7 +348,7 @@ VolumeProfileData CalcularVolumeProfile() {
    vp.zona = "INDEFINIDO";
 
    MqlRates rates[];
-   int cnt = CopyRates(_Symbol, PERIOD_M1, 0, VP_Barras, rates);
+   int cnt = CopyRates(_Symbol, PERIOD_M1, 0, cfg.vp_barras, rates);
    if(cnt <= 0)
       return vp;
 
@@ -405,7 +435,7 @@ VolumeProfileData CalcularVolumeProfile() {
    vp.val = IndexToPrice(idxMin + valIdx, step);
    vp.vah = IndexToPrice(idxMin + vahIdx, step);
 
-   double margem = VP_MargemPOC * _Point;
+   double margem = cfg.vp_margem * _Point;
    if(vp.precoAtual >= vp.poc - margem && vp.precoAtual <= vp.poc + margem)
       vp.zona = "NO_POC";
    else if(vp.precoAtual > vp.poc)
@@ -444,7 +474,7 @@ void AjustarStops(double preco_entrada, double &sl, double &tp, bool is_buy) {
    if(dist_minima < spread_minimo)
       dist_minima = spread_minimo;
 
-   if(LogDetalhado >= LOG_DEBUG) {
+   if(cfg.log_nivel >= LOG_DEBUG) {
       Print("  [DEBUG] Ajuste de Stops:");
       Print("    SYMBOL_TRADE_STOPS_LEVEL: ", stops_level, " pontos");
       Print("    Margem de seguranca: ", margem_seguranca, " pontos");
@@ -505,7 +535,7 @@ void AjustarStops(double preco_entrada, double &sl, double &tp, bool is_buy) {
    double dist_sl_final = is_buy ? (preco_entrada - sl) : (sl - preco_entrada);
    double dist_tp_final = is_buy ? (tp - preco_entrada) : (preco_entrada - tp);
 
-   if(LogDetalhado >= LOG_DEBUG) {
+   if(cfg.log_nivel >= LOG_DEBUG) {
       Print("    SL original: ", DoubleToString(sl_original, _Digits),
             " -> Final: ", DoubleToString(sl, _Digits),
             " (distancia: ", (int)(dist_sl_final / point), " pts)");
@@ -546,17 +576,91 @@ double NormalizarVolume(double volume) {
 //+------------------------------------------------------------------+
 //| Verifica confirmacao para COMPRA                                 |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Le a media movel e diz de que lado dela o preco esta              |
+//| Retorna "ALTA", "BAIXA" ou "" se o filtro estiver desligado       |
+//+------------------------------------------------------------------+
+string LerTendencia() {
+   if(!cfg.usar_tendencia || mm_handle == INVALID_HANDLE)
+      return "";
+
+   if(CopyBuffer(mm_handle, 0, 0, 1, mm_buffer) <= 0)
+      return "";  // ainda sem dado suficiente: nao bloqueia nem confirma
+
+   g_mm_valor = mm_buffer[0];
+   double preco = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   if(preco <= 0 || g_mm_valor <= 0)
+      return "";
+
+   return (preco > g_mm_valor) ? "ALTA" : "BAIXA";
+}
+
+//+------------------------------------------------------------------+
+//| Le o ATR (tamanho do movimento normal) em pontos                  |
+//| Retorna 0 quando o ATR esta desligado ou ainda sem dado           |
+//+------------------------------------------------------------------+
+double LerATRPontos() {
+   if(!cfg.usar_atr || atr_handle == INVALID_HANDLE)
+      return 0;
+
+   if(CopyBuffer(atr_handle, 0, 0, 1, atr_buffer) <= 0)
+      return 0;
+
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   if(point <= 0)
+      return 0;
+
+   g_atr_valor = atr_buffer[0] / point;   // guarda em pontos, como o resto do EA
+   return g_atr_valor;
+}
+
+//+------------------------------------------------------------------+
+//| Stop e alvo do momento: fixos, ou proporcionais ao ATR            |
+//+------------------------------------------------------------------+
+void DistanciasAtuais(double &sl_pts, double &tp_pts) {
+   sl_pts = cfg.sl;
+   tp_pts = cfg.tp;
+
+   double atr = LerATRPontos();
+   if(atr <= 0)
+      return;   // ATR desligado ou sem dado: mantem os pontos fixos
+
+   sl_pts = atr * cfg.atr_mult_sl;
+   tp_pts = atr * cfg.atr_mult_tp;
+
+   // Piso de seguranca: um ATR minusculo geraria stop colado no preco
+   double minimo = 50;
+   if(sl_pts < minimo) sl_pts = minimo;
+   if(tp_pts < minimo * 2) tp_pts = minimo * 2;
+}
+
+//+------------------------------------------------------------------+
+//| Ultima palavra antes de comprar: o RSI ja deu o sinal, aqui os   |
+//| filtros ligados tem direito de veto. Basta um barrar para negar. |
+//| Filtro desligado nao opina. Ver ConfirmacaoVenda para o espelho. |
+//+------------------------------------------------------------------+
 bool ConfirmacaoCompra() {
    bool confirmado = true;
+
+   // Filtro de tendencia: o RSI aponta reversao, mas comprar numa queda firme
+   // e comprar na faca. So entra quando a mare ja esta a favor.
+   if(cfg.usar_tendencia) {
+      string tend = LerTendencia();
+      if(tend == "BAIXA") {
+         if(cfg.log_nivel >= LOG_DEBUG)
+            Print("    Tendencia: preco ABAIXO da media - compra rejeitada");
+         return false;
+      }
+   }
 
    if(cfg.usar_agressao) {
       if(g_agressao.ok) {
          if(g_agressao.direcao == "COMPRA") {
-            if(LogDetalhado >= LOG_DEBUG)
+            if(cfg.log_nivel >= LOG_DEBUG)
                Print("    Agressao: COMPRADORES dominando (",
                      DoubleToString(g_agressao.pctCompra * 100, 1), "%)");
          } else {
-            if(LogDetalhado >= LOG_DEBUG)
+            if(cfg.log_nivel >= LOG_DEBUG)
                Print("    Agressao: ", g_agressao.direcao,
                      " (Compra: ", DoubleToString(g_agressao.pctCompra * 100, 1), "%)");
             confirmado = false;
@@ -566,9 +670,18 @@ bool ConfirmacaoCompra() {
 
    if(cfg.usar_volume_profile && confirmado) {
       if(g_volumeProfile.ok) {
-         if(LogDetalhado >= LOG_DEBUG)
-            Print("    Volume Profile: Preco ", g_volumeProfile.zona,
-                  " | POC: ", DoubleToString(g_volumeProfile.poc, _Digits));
+         // Nao compra o que ja esta caro: se o preco esta acima do POC, ele
+         // ja subiu alem da regiao onde o mercado concentrou o volume.
+         if(g_volumeProfile.zona == "ACIMA_POC") {
+            if(cfg.log_nivel >= LOG_DEBUG)
+               Print("    Volume Profile: preco ACIMA do POC (",
+                     DoubleToString(g_volumeProfile.poc, _Digits), ") - compra rejeitada");
+            confirmado = false;
+         } else {
+            if(cfg.log_nivel >= LOG_DEBUG)
+               Print("    Volume Profile: Preco ", g_volumeProfile.zona,
+                     " | POC: ", DoubleToString(g_volumeProfile.poc, _Digits));
+         }
       }
    }
 
@@ -581,14 +694,24 @@ bool ConfirmacaoCompra() {
 bool ConfirmacaoVenda() {
    bool confirmado = true;
 
+   // Espelho da compra: nao vende contra uma alta firme.
+   if(cfg.usar_tendencia) {
+      string tend = LerTendencia();
+      if(tend == "ALTA") {
+         if(cfg.log_nivel >= LOG_DEBUG)
+            Print("    Tendencia: preco ACIMA da media - venda rejeitada");
+         return false;
+      }
+   }
+
    if(cfg.usar_agressao) {
       if(g_agressao.ok) {
          if(g_agressao.direcao == "VENDA") {
-            if(LogDetalhado >= LOG_DEBUG)
+            if(cfg.log_nivel >= LOG_DEBUG)
                Print("    Agressao: VENDEDORES dominando (",
                      DoubleToString(g_agressao.pctVenda * 100, 1), "%)");
          } else {
-            if(LogDetalhado >= LOG_DEBUG)
+            if(cfg.log_nivel >= LOG_DEBUG)
                Print("    Agressao: ", g_agressao.direcao,
                      " (Venda: ", DoubleToString(g_agressao.pctVenda * 100, 1), "%)");
             confirmado = false;
@@ -598,9 +721,18 @@ bool ConfirmacaoVenda() {
 
    if(cfg.usar_volume_profile && confirmado) {
       if(g_volumeProfile.ok) {
-         if(LogDetalhado >= LOG_DEBUG)
-            Print("    Volume Profile: Preco ", g_volumeProfile.zona,
-                  " | POC: ", DoubleToString(g_volumeProfile.poc, _Digits));
+         // Espelho da compra: nao vende o que ja esta barato, abaixo da
+         // regiao onde o mercado concentrou o volume.
+         if(g_volumeProfile.zona == "ABAIXO_POC") {
+            if(cfg.log_nivel >= LOG_DEBUG)
+               Print("    Volume Profile: preco ABAIXO do POC (",
+                     DoubleToString(g_volumeProfile.poc, _Digits), ") - venda rejeitada");
+            confirmado = false;
+         } else {
+            if(cfg.log_nivel >= LOG_DEBUG)
+               Print("    Volume Profile: Preco ", g_volumeProfile.zona,
+                     " | POC: ", DoubleToString(g_volumeProfile.poc, _Digits));
+         }
       }
    }
 
@@ -633,8 +765,28 @@ int OnInit() {
    cfg.trailing_pts = TrailingStop_Points;
    cfg.usar_agressao = UsarAgressao;
    cfg.usar_volume_profile = UsarVolumeProfile;
+   cfg.usar_tendencia = UsarFiltroTendencia;
+   cfg.usar_atr = UsarATR;
 
-   // Guarda valores originais para reset
+   // A partir daqui todo parametro vive na struct: o painel altera em tempo real
+   cfg.rsi_period  = RSI_Period;             cfg.rsi_price   = (int)RSI_Price;
+   cfg.rsi_os      = RSI_Oversold;           cfg.rsi_ob      = RSI_Overbought;
+   cfg.agr_janela  = Agressao_JanelaSeg;
+   cfg.agr_volmin  = Agressao_VolumeMinimo;  cfg.agr_pctmin  = Agressao_PctMinimo;
+   cfg.vp_barras   = VP_Barras;              cfg.vp_passo    = VP_PassoTicks;
+   cfg.vp_margem   = VP_MargemPOC;
+   cfg.mm_periodo  = MM_Periodo;             cfg.mm_metodo   = (int)MM_Metodo;
+   cfg.atr_periodo = ATR_Periodo;
+   cfg.atr_mult_sl = ATR_Mult_SL;            cfg.atr_mult_tp = ATR_Mult_TP;
+   cfg.max_pos     = MaxPositions;
+   cfg.log_nivel   = (int)LogDetalhado;
+   cfg.export_ms   = (int)IntervaloExportacao_MS;
+
+   // Fotografia dos valores de partida, que o botao RESETAR do painel devolve.
+   // TEM que ficar DEPOIS de todos os 28 campos de cfg serem preenchidos: subir
+   // esta linha faz o RESETAR restaurar campos pela metade, e o robo passa a
+   // operar com uma configuracao que nunca foi pedida. Ao acrescentar campo
+   // novo em SRSIConfig, preencha-o ACIMA daqui.
    cfg_original = cfg;
 
    // Guarda saldo inicial para calcular lucro realizado no backtest
@@ -642,12 +794,39 @@ int OnInit() {
    saldo_inicial = AccountInfoDouble(ACCOUNT_BALANCE);
    lucro_realizado = 0.0;
 
-   rsi_handle = iRSI(_Symbol, _Period, RSI_Period, RSI_Price);
+   rsi_handle = iRSI(_Symbol, _Period, cfg.rsi_period, (ENUM_APPLIED_PRICE)cfg.rsi_price);
    if(rsi_handle == INVALID_HANDLE) {
       LogMsg(LOG_ERROR, "Falha ao criar indicador RSI");
       return(INIT_FAILED);
    }
    ArraySetAsSeries(rsi_buffer, true);
+   ind_rsi_period = cfg.rsi_period;  ind_rsi_price = cfg.rsi_price;
+
+   // Media movel: da o sentido da mare, para o robo nao comprar contra a tendencia
+   if(cfg.usar_tendencia) {
+      mm_handle = iMA(_Symbol, _Period, cfg.mm_periodo, 0, (ENUM_MA_METHOD)cfg.mm_metodo, PRICE_CLOSE);
+      if(mm_handle == INVALID_HANDLE) {
+         LogMsg(LOG_ERROR, "Falha ao criar a media movel do filtro de tendencia");
+         return(INIT_FAILED);
+      }
+      ArraySetAsSeries(mm_buffer, true);
+      ind_mm_periodo = cfg.mm_periodo;  ind_mm_metodo = cfg.mm_metodo;
+      LogMsg(LOG_INFO, StringFormat("Filtro de tendencia: media %s de %d periodos",
+                                    EnumToString((ENUM_MA_METHOD)cfg.mm_metodo), cfg.mm_periodo));
+   }
+
+   // ATR: mede o tamanho do movimento normal, para o stop nao ser o mesmo todo dia
+   if(cfg.usar_atr) {
+      atr_handle = iATR(_Symbol, _Period, cfg.atr_periodo);
+      if(atr_handle == INVALID_HANDLE) {
+         LogMsg(LOG_ERROR, "Falha ao criar o ATR");
+         return(INIT_FAILED);
+      }
+      ArraySetAsSeries(atr_buffer, true);
+      ind_atr_periodo = cfg.atr_periodo;
+      LogMsg(LOG_INFO, StringFormat("Stop por volatilidade: ATR(%d) x%.1f no stop, x%.1f no alvo",
+                                    cfg.atr_periodo, cfg.atr_mult_sl, cfg.atr_mult_tp));
+   }
 
    trade.SetExpertMagicNumber(MagicNumber);
    trade.SetDeviationInPoints(10);
@@ -666,7 +845,7 @@ int OnInit() {
 
    LogMsg(LOG_DEBUG, "------------------------------------------------------------");
    LogMsg(LOG_DEBUG, "CONFIGURACOES");
-   LogMsg(LOG_DEBUG, StringFormat("RSI Periodo: %d | Sobrevenda: %.1f | Sobrecompra: %.1f", RSI_Period, RSI_Oversold, RSI_Overbought));
+   LogMsg(LOG_DEBUG, StringFormat("RSI Periodo: %d | Sobrevenda: %.1f | Sobrecompra: %.1f", cfg.rsi_period, cfg.rsi_os, cfg.rsi_ob));
    LogMsg(LOG_DEBUG, StringFormat("Lote: %.2f | SL: %.0f pts | TP: %.0f pts", cfg.lote, cfg.sl, cfg.tp));
    LogMsg(LOG_DEBUG, StringFormat("Trailing Stop: %s", cfg.trailing ? "Ativo" : "Desativado"));
    LogMsg(LOG_DEBUG, "------------------------------------------------------------");
@@ -703,9 +882,12 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnTimer() {
    if(UsarPainelExterno && exportador != NULL) {
-      AtualizarLucroDia();        // Atualiza lucro do dia (1x por segundo)
-      ExportarDadosPainelExterno(); // Exporta dados para o painel (1x por segundo)
-      // ProcessarComandosPainelExterno() removido - já processa no OnTick() com frequência suficiente
+      // Importante: processar o comando do painel antes da exportacao. Se o EA
+      // publica o JSON antigo antes de aplicar SALVAR_CONFIG, o painel ressincroniza
+      // com valores antigos e a pessoa "volta" para a configuracao de partida.
+      ProcessarComandosPainelExterno();
+      AtualizarLucroDia();              // Atualiza lucro do dia (1x por segundo)
+      ExportarDadosPainelExterno();     // Exporta dados para o painel (1x por segundo)
    }
 }
 
@@ -722,6 +904,12 @@ void OnDeinit(const int reason) {
 
    if(rsi_handle != INVALID_HANDLE)
       IndicatorRelease(rsi_handle);
+
+   if(mm_handle != INVALID_HANDLE)
+      IndicatorRelease(mm_handle);
+
+   if(atr_handle != INVALID_HANDLE)
+      IndicatorRelease(atr_handle);
 
    if(exportador != NULL)
       delete exportador;
@@ -772,7 +960,7 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
             // Recalcula o acumulado do histórico (fonte única de verdade)
             AtualizarLucroDia(true);
 
-            if(LogDetalhado >= LOG_INFO && lucro_deal != 0) {
+            if(cfg.log_nivel >= LOG_INFO && lucro_deal != 0) {
                LogMsg(LOG_INFO, StringFormat("TRADE FECHADO | Lucro: %.2f | Comissao: %.2f | Total: %.2f | Acumulado: %.2f",
                       lucro_liquido, comissao, lucro_liquido, lucro_realizado));
             }
@@ -829,12 +1017,13 @@ void OnTick() {
       "═══════════════════════════════════════"
    );
 
-   if(UsarPainelExterno && exportador != NULL)
-      ExportarDadosPainelExterno();
-
-   // Processa comandos do painel (PAUSAR, FECHAR_TUDO, SALVAR_CONFIG, etc)
+   // Processa comandos do painel antes de exportar o estado, para que a
+   // configuracao nova nao seja imediatamente sobrescrita pelo JSON antigo.
    if(UsarPainelExterno && exportador != NULL)
       ProcessarComandosPainelExterno();
+
+   if(UsarPainelExterno && exportador != NULL)
+      ExportarDadosPainelExterno();
 
    if(cfg.pausado)
       return;
@@ -844,7 +1033,7 @@ void OnTick() {
    if(cfg.trailing && total_positions > 0)
       ApplyTrailingStop();
 
-   // ✅ Calcula RSI ANTES de verificar MaxPositions (permite reset de flags)
+   // ✅ Calcula RSI ANTES de verificar cfg.max_pos (permite reset de flags)
    if(CopyBuffer(rsi_handle, 0, 0, 3, rsi_buffer) <= 0)
       return;
 
@@ -865,17 +1054,25 @@ void OnTick() {
 
    // ✅ Reset de flags - permite novo sinal quando RSI voltar à zona neutra
    // buy_signal_sent reseta quando RSI SOBE de volta (acima de oversold + margem)
-   if(buy_signal_sent && rsi_current > RSI_Oversold + 5)
+   if(buy_signal_sent && rsi_current > cfg.rsi_os + 5)
       buy_signal_sent = false;
 
    // sell_signal_sent reseta quando RSI CAI bem abaixo de overbought (zona neutra)
-   if(sell_signal_sent && rsi_current < RSI_Overbought - 5)
+   if(sell_signal_sent && rsi_current < cfg.rsi_ob - 5)
       sell_signal_sent = false;
 
-   // Bloqueia novas entradas se já atingiu MaxPositions (mas flags já foram resetadas)
-   if(total_positions >= MaxPositions) {
+   // Bloqueia novas entradas se já atingiu cfg.max_pos (mas flags já foram resetadas)
+   if(total_positions >= cfg.max_pos) {
       aguardando_entrada = false;  // Reset flag pois posição já existe
       return;
+   }
+
+   // A trava so vale enquanto a corretora nao respondeu. Se a posicao abriu e
+   // fechou entre dois ticks, nenhum tick chegou a ver cfg.max_pos e o reset
+   // acima nunca acontece — sem esta expiracao o EA travaria para sempre.
+   if(aguardando_entrada && (TimeCurrent() - aguardando_desde) >= AGUARDA_ENTRADA_SEG) {
+      LogMsg(LOG_DEBUG, "Trava de entrada expirou; ordem anterior ja se resolveu");
+      aguardando_entrada = false;
    }
 
    // Bloqueia novas entradas enquanto aguarda ordem ser processada
@@ -887,19 +1084,22 @@ void OnTick() {
    double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
 
    // SINAL DE COMPRA
-   if(rsi_previous <= RSI_Oversold && rsi_current > RSI_Oversold) {
+   if(rsi_previous <= cfg.rsi_os && rsi_current > cfg.rsi_os) {
       if(!buy_signal_sent) {
          LogMsg(LOG_INFO, "------------------------------------------------------------");
-         LogMsg(LOG_INFO, StringFormat("[SINAL] COMPRA DETECTADA | RSI: %.2f (cruzou acima de %.1f)", rsi_current, RSI_Oversold));
+         LogMsg(LOG_INFO, StringFormat("[SINAL] COMPRA DETECTADA | RSI: %.2f (cruzou acima de %.1f)", rsi_current, cfg.rsi_os));
          LogMsg(LOG_INFO, "------------------------------------------------------------");
 
          if(ConfirmacaoCompra()) {
-            double sl = ask - (cfg.sl * point);
-            double tp = ask + (cfg.tp * point);
+            double d_sl, d_tp;
+            DistanciasAtuais(d_sl, d_tp);   // fixos, ou proporcionais ao ATR
+            double sl = ask - (d_sl * point);
+            double tp = ask + (d_tp * point);
             AjustarStops(ask, sl, tp, true);
             double lote = NormalizarVolume(cfg.lote);
 
             aguardando_entrada = true;  // Bloqueia novas entradas
+            aguardando_desde  = TimeCurrent();
             if(trade.Buy(lote, _Symbol, ask, sl, tp, "RSI Compra")) {
                // Calcula distâncias reais (após ajuste)
                double sl_pts = (ask - sl) / point;
@@ -920,26 +1120,29 @@ void OnTick() {
             LogMsg(LOG_INFO, StringFormat("[BLOQUEADO] COMPRA BLOQUEADA | Filtro de Agressao: %s (%.1f%% compra) | Necessario: >= %.0f%% e volume >= %.0f",
                                          g_agressao.direcao,
                                          g_agressao.pctCompra * 100,
-                                         Agressao_PctMinimo * 100,
-                                         Agressao_VolumeMinimo));
+                                         cfg.agr_pctmin * 100,
+                                         cfg.agr_volmin));
          }
       }
    }
 
    // SINAL DE VENDA
-   else if(rsi_previous >= RSI_Overbought && rsi_current < RSI_Overbought) {
+   else if(rsi_previous >= cfg.rsi_ob && rsi_current < cfg.rsi_ob) {
       if(!sell_signal_sent) {
          LogMsg(LOG_INFO, "------------------------------------------------------------");
-         LogMsg(LOG_INFO, StringFormat("[SINAL] VENDA DETECTADA | RSI: %.2f (cruzou abaixo de %.1f)", rsi_current, RSI_Overbought));
+         LogMsg(LOG_INFO, StringFormat("[SINAL] VENDA DETECTADA | RSI: %.2f (cruzou abaixo de %.1f)", rsi_current, cfg.rsi_ob));
          LogMsg(LOG_INFO, "------------------------------------------------------------");
 
          if(ConfirmacaoVenda()) {
-            double sl = bid + (cfg.sl * point);
-            double tp = bid - (cfg.tp * point);
+            double d_sl, d_tp;
+            DistanciasAtuais(d_sl, d_tp);   // fixos, ou proporcionais ao ATR
+            double sl = bid + (d_sl * point);
+            double tp = bid - (d_tp * point);
             AjustarStops(bid, sl, tp, false);
             double lote = NormalizarVolume(cfg.lote);
 
             aguardando_entrada = true;  // Bloqueia novas entradas
+            aguardando_desde  = TimeCurrent();
             if(trade.Sell(lote, _Symbol, bid, sl, tp, "RSI Venda")) {
                // Calcula distâncias reais (após ajuste)
                double sl_pts = (sl - bid) / point;
@@ -960,8 +1163,8 @@ void OnTick() {
             LogMsg(LOG_INFO, StringFormat("[BLOQUEADO] VENDA BLOQUEADA | Filtro de Agressao: %s (%.1f%% venda) | Necessario: >= %.0f%% e volume >= %.0f",
                                          g_agressao.direcao,
                                          g_agressao.pctVenda * 100,
-                                         Agressao_PctMinimo * 100,
-                                         Agressao_VolumeMinimo));
+                                         cfg.agr_pctmin * 100,
+                                         cfg.agr_volmin));
          }
       }
    }
@@ -971,6 +1174,11 @@ void OnTick() {
 //| Exporta dados para o painel externo                              |
 //+------------------------------------------------------------------+
 void ExportarDadosPainelExterno() {
+   // Atualiza tendencia e volatilidade sempre, nao so quando ha sinal,
+   // para o painel refletir o estado real a cada atualizacao.
+   g_tendencia = LerTendencia();
+   LerATRPontos();
+
    // BACKTEST: Exporta a cada N barras para evitar throttle baseado em tempo real
    // GetTickCount() retorna tempo REAL do sistema, não tempo simulado no backtest
    // Isso causava bloqueio de quase todas as exportações durante backtest rápido
@@ -988,7 +1196,7 @@ void ExportarDadosPainelExterno() {
       // LIVE: Throttle baseado em tempo real (funciona corretamente)
       uint agora = GetTickCount();
       uint diff = agora - ultima_exportacao;
-      if(diff < IntervaloExportacao_MS && diff < 60000)
+      if(diff < (uint)cfg.export_ms && diff < 60000)
          return;
    }
 
@@ -1020,13 +1228,13 @@ void ExportarDadosPainelExterno() {
 
    // Determinar status do sinal
    string sinal_status = "Aguardando sinal...";
-   if(rsi_atual <= RSI_Oversold)
+   if(rsi_atual <= cfg.rsi_os)
       sinal_status = "RSI em SOBREVENDA (" + DoubleToString(rsi_atual, 1) + ")";
-   else if(rsi_atual >= RSI_Overbought)
+   else if(rsi_atual >= cfg.rsi_ob)
       sinal_status = "RSI em SOBRECOMPRA (" + DoubleToString(rsi_atual, 1) + ")";
-   else if(rsi_atual > RSI_Oversold && rsi_atual < 45)
+   else if(rsi_atual > cfg.rsi_os && rsi_atual < 45)
       sinal_status = "RSI subindo (" + DoubleToString(rsi_atual, 1) + ")";
-   else if(rsi_atual < RSI_Overbought && rsi_atual > 55)
+   else if(rsi_atual < cfg.rsi_ob && rsi_atual > 55)
       sinal_status = "RSI caindo (" + DoubleToString(rsi_atual, 1) + ")";
    else
       sinal_status = "RSI neutro (" + DoubleToString(rsi_atual, 1) + ")";
@@ -1043,7 +1251,8 @@ void ExportarDadosPainelExterno() {
       logs_ordenados[i] = g_log_buffer[idx];
    }
 
-   exportador.ExportarDados(
+   exportador.SetParametros(cfg);
+      exportador.ExportarDados(
       status, _Symbol, posicoes, lucro_dia, rsi_atual,
       cfg.lote, cfg.sl, cfg.tp,
       cfg.trailing, cfg.trailing_pts,
@@ -1056,12 +1265,63 @@ void ExportarDadosPainelExterno() {
       g_volumeProfile.poc, g_volumeProfile.vah, g_volumeProfile.val,
       g_volumeProfile.zona, sinal_status,
       cfg.usar_agressao, cfg.usar_volume_profile,
-      lucro_total_backtest  // Lucro total (apenas backtest)
+      lucro_total_backtest,  // Lucro total (apenas backtest)
+      // Filtro de tendencia e stop por volatilidade
+      cfg.usar_tendencia, cfg.usar_atr,
+      g_mm_valor, g_atr_valor, g_tendencia
    );
 }
 
 //+------------------------------------------------------------------+
-//| Processa comandos do painel externo                              |
+//| Recria os indicadores quando o painel muda periodo/metodo.       |
+//| Handle nasce com o parametro fixo: mudar exige criar de novo.    |
+//+------------------------------------------------------------------+
+void RecriarIndicadoresSePreciso() {
+   if(cfg.rsi_period != ind_rsi_period || cfg.rsi_price != ind_rsi_price) {
+      int novo = iRSI(_Symbol, _Period, cfg.rsi_period, (ENUM_APPLIED_PRICE)cfg.rsi_price);
+      if(novo == INVALID_HANDLE) {
+         LogMsg(LOG_ERROR, StringFormat("RSI(%d) invalido: mantendo o anterior", cfg.rsi_period));
+         cfg.rsi_period = ind_rsi_period;  cfg.rsi_price = ind_rsi_price;
+      } else {
+         if(rsi_handle != INVALID_HANDLE) IndicatorRelease(rsi_handle);
+         rsi_handle = novo;  ArraySetAsSeries(rsi_buffer, true);
+         ind_rsi_period = cfg.rsi_period;  ind_rsi_price = cfg.rsi_price;
+         LogMsg(LOG_INFO, StringFormat("RSI recriado: %d periodos", cfg.rsi_period));
+      }
+   }
+
+   if(cfg.usar_tendencia && (cfg.mm_periodo != ind_mm_periodo || cfg.mm_metodo != ind_mm_metodo)) {
+      int novo = iMA(_Symbol, _Period, cfg.mm_periodo, 0, (ENUM_MA_METHOD)cfg.mm_metodo, PRICE_CLOSE);
+      if(novo == INVALID_HANDLE) {
+         LogMsg(LOG_ERROR, "Media movel invalida: mantendo a anterior");
+         cfg.mm_periodo = ind_mm_periodo;  cfg.mm_metodo = ind_mm_metodo;
+      } else {
+         if(mm_handle != INVALID_HANDLE) IndicatorRelease(mm_handle);
+         mm_handle = novo;  ArraySetAsSeries(mm_buffer, true);
+         ind_mm_periodo = cfg.mm_periodo;  ind_mm_metodo = cfg.mm_metodo;
+         LogMsg(LOG_INFO, StringFormat("Media movel recriada: %d periodos", cfg.mm_periodo));
+      }
+   }
+
+   if(cfg.usar_atr && cfg.atr_periodo != ind_atr_periodo) {
+      int novo = iATR(_Symbol, _Period, cfg.atr_periodo);
+      if(novo == INVALID_HANDLE) {
+         LogMsg(LOG_ERROR, "ATR invalido: mantendo o anterior");
+         cfg.atr_periodo = ind_atr_periodo;
+      } else {
+         if(atr_handle != INVALID_HANDLE) IndicatorRelease(atr_handle);
+         atr_handle = novo;  ArraySetAsSeries(atr_buffer, true);
+         ind_atr_periodo = cfg.atr_periodo;
+         LogMsg(LOG_INFO, StringFormat("ATR recriado: %d periodos", cfg.atr_periodo));
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Ponte painel -> robo: le e aplica um comando por chamada.        |
+//| Formato SALVAR_CONFIG:chave=valor;chave=valor (o posicional      |
+//| antigo ainda e aceito). Chave desconhecida ou valor fora do      |
+//| limite e ignorada, mantendo o valor que ja estava valendo.       |
 //+------------------------------------------------------------------+
 void ProcessarComandosPainelExterno() {
    string comando = exportador.LerComando();
@@ -1232,7 +1492,7 @@ void ApplyTrailingStop() {
 
             if((position_sl == 0 || new_sl > position_sl) && new_sl < bid) {
                if(!trade.PositionModify(ticket, new_sl, position_tp)) {
-                  if(LogDetalhado >= LOG_DEBUG)
+                  if(cfg.log_nivel >= LOG_DEBUG)
                      Print("[Trailing] Falha ao modificar BUY #", ticket, ": ", trade.ResultRetcodeDescription());
                }
             }
@@ -1243,7 +1503,7 @@ void ApplyTrailingStop() {
 
             if((position_sl == 0 || new_sl < position_sl) && new_sl > ask) {
                if(!trade.PositionModify(ticket, new_sl, position_tp)) {
-                  if(LogDetalhado >= LOG_DEBUG)
+                  if(cfg.log_nivel >= LOG_DEBUG)
                      Print("[Trailing] Falha ao modificar SELL #", ticket, ": ", trade.ResultRetcodeDescription());
                }
             }

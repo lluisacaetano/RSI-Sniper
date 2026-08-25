@@ -1,14 +1,14 @@
 ============================================================
-  RSI SNIPER PRO - Scripts para macOS
+  RSI SNIPER PRO - Scripts para Windows
 ============================================================
 
-Esta pasta contém dois aplicativos:
+Esta pasta contém dois executáveis:
 
 
-1. Instalar_RSI_Sniper.app
+1. Instalar_RSI_Sniper.bat
 ------------------------------------------------------------
    O QUE FAZ:
-   - Procura automaticamente a pasta do MetaTrader 5 (Wine)
+   - Procura automaticamente a pasta do MetaTrader 5
    - Copia os arquivos do RSI Sniper para as pastas corretas
    - Cria um atalho na Area de Trabalho para abrir o painel
 
@@ -16,16 +16,14 @@ Esta pasta contém dois aplicativos:
    - Execute apenas uma vez, na primeira instalacao
    - Execute novamente se quiser atualizar os arquivos
 
-   NOTA: Se aparecer aviso de seguranca, va em:
-   Preferencias do Sistema > Privacidade e Seguranca > Abrir Mesmo Assim
 
-
-2. Abrir_Painel.app
+2. Abrir_Painel.bat
 ------------------------------------------------------------
    O QUE FAZ:
    - Localiza o painel instalado no MetaTrader 5
    - Abre o Painel de Controle do RSI Sniper
-   - Instala automaticamente dependencias se necessario
+   - Verifica e instala o CustomTkinter automaticamente
+   - Se faltar o Python, o instalador avisa e indica o que baixar
 
    QUANDO USAR:
    - Sempre que quiser abrir o painel de controle
@@ -36,21 +34,19 @@ Esta pasta contém dois aplicativos:
   ORDEM DE EXECUCAO
 ============================================================
 
-   1. Execute: Instalar_RSI_Sniper.app
-   2. Compile o EA no MetaEditor (F7)
-   3. Execute: Abrir_Painel.app (ou use o atalho no Desktop)
+   1. Execute: Instalar_RSI_Sniper.bat
+   2. (o robo ja vai compilado no pacote; o F7 no MetaEditor so e
+       necessario se voce alterar o RSI_Sniper.mq5)
+   3. Execute: Abrir_Painel.bat (ou use o atalho no Desktop)
 
 
 ============================================================
   REQUISITOS
 ============================================================
 
-   - Python 3.8 ou superior (via Homebrew recomendado)
-   - MetaTrader 5 instalado via Wine/CrossOver
+   - Python 3.8 ou superior instalado
+   - MetaTrader 5 instalado
    - CustomTkinter (instalado automaticamente)
-
-   Para instalar Python no macOS:
-   brew install python3
 
 
 ============================================================

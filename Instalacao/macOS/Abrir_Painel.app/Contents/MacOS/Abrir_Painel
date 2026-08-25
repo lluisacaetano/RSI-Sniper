@@ -1,12 +1,5 @@
 #!/bin/bash
-# RSI Sniper - Painel de Controle
-
-echo "============================================================"
-echo "  RSI SNIPER - Localizando Painel..."
-echo "============================================================"
-echo ""
-
-# Busca na pasta de dados do MT5 (Wine)
+set -u
 WINE_BASE="$HOME/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users"
 PANEL_FOUND=""
 
@@ -28,7 +21,6 @@ if [ -d "$WINE_BASE" ]; then
     done
 fi
 
-# Fallback: pasta do programa
 if [ -z "$PANEL_FOUND" ]; then
     PROG_PANEL="$HOME/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Include/MWM/rsi_panel.py"
     if [ -f "$PROG_PANEL" ]; then
@@ -38,12 +30,7 @@ if [ -z "$PANEL_FOUND" ]; then
 fi
 
 if [ -n "$PANEL_FOUND" ]; then
-    echo "Painel encontrado em:"
-    echo "$PANEL_DIR"
-    echo ""
-    echo "Iniciando painel..."
-    cd "$PANEL_DIR"
-
+    cd "$PANEL_DIR" || exit 1
     # Escolhe o Python que abre o painel de verdade, nao so o primeiro que
     # tenha tkinter. O Finder nao passa o PATH do Terminal para o aplicativo,
     # entao la so aparece /usr/bin/python3, cujo Tk 8.5.9 e o Aqua antigo:
@@ -61,30 +48,27 @@ if [ -n "$PANEL_FOUND" ]; then
         PY="$CAND"
         break
     done
-
+    # Aberto pelo Finder nao existe terminal: um echo aqui nao chega a ninguem,
+    # o app so morre calado. Todo erro daqui pra frente vira alerta na tela.
     if [ -z "$PY" ]; then
         if [ -n "$PY_TK_VELHO" ]; then
-            echo "O Python deste Mac ($PY_TK_VELHO) traz o Tk 8.5, que abre o painel em branco."
+            MSG="O Python deste Mac ($PY_TK_VELHO) traz o Tk 8.5, que abre o painel em branco.\n\nNo Terminal, rode:\n    brew install python python-tk\n\nDepois abra o painel de novo."
         else
-            echo "Nao encontrei um Python 3 com a parte grafica (tkinter)."
+            MSG="Nao encontrei um Python 3 com a parte grafica (tkinter).\n\nNo Terminal, rode:\n    brew install python python-tk\n\nDepois abra o painel de novo."
         fi
-        echo "  Rode:  brew install python python-tk"
-        read -p "Pressione ENTER para fechar..."
+        osascript -e "display alert \"RSI Sniper\" message \"$MSG\" as critical" >/dev/null 2>&1
         exit 1
     fi
-
-    "$PY" -c "import customtkinter" >/dev/null 2>&1 || "$PY" -m pip install customtkinter
-
-    # exec e obrigatorio no macOS: sem ele o shell do bundle continua como PID
-    # principal e a janela Tk nasce como processo filho, aparecendo branca.
+    if ! "$PY" -c "import customtkinter" >/dev/null 2>&1; then
+        "$PY" -m pip install customtkinter >/dev/null 2>&1 \
+            || "$PY" -m pip install --break-system-packages customtkinter >/dev/null 2>&1
+    fi
+    if ! "$PY" -c "import customtkinter" >/dev/null 2>&1; then
+        osascript -e "display alert \"RSI Sniper\" message \"Falta a biblioteca customtkinter.\n\nNo Terminal, rode:\n    $PY -m pip install customtkinter\" as critical" >/dev/null 2>&1
+        exit 1
+    fi
     exec "$PY" rsi_panel.py
-else
-    echo ""
-    echo "============================================================"
-    echo "  ERRO: Painel nao encontrado!"
-    echo "============================================================"
-    echo ""
-    echo "Execute o instalador primeiro."
-    echo ""
-    read -p "Pressione ENTER para fechar..."
 fi
+
+echo "Painel RSI Sniper nao encontrado. Execute o instalador primeiro." >&2
+exit 1

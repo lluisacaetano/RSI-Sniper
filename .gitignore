@@ -2,3 +2,20 @@
 2a Macroentrega/
 .DS_Store
 .claude/
+.vscode/
+
+# Outro projeto, guardado aqui dentro por conveniencia (1,1 GB)
+Robo-WIN-MWM - Junho/
+
+# Caches e artefatos locais
+__pycache__/
+*.pyc
+
+# Copias de seguranca feitas a mao antes de mexer nos arquivos
+*.bak
+*.bak-*
+*.backup-*
+Scripts/_backup-antes-rsi-painel/
+
+# Atalhos do Windows que caem aqui pelo drive compartilhado
+*.lnk

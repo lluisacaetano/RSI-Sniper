@@ -10,7 +10,8 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Scripts/ (Arquivos do Robo)
-     - RSI_Sniper.mq5    - Expert Advisor principal
+     - RSI_Sniper.ex5    - Expert Advisor ja compilado (e o que roda)
+     - RSI_Sniper.mq5    - codigo fonte do Expert Advisor
      - RSIExport.mqh     - Biblioteca de comunicação
      - rsi_panel.py      - Painel de controle Python
 
@@ -18,24 +19,26 @@
      - Windows/
         - Instalar_RSI_Sniper.bat - Instala os arquivos
         - Abrir_Painel.bat        - Abre o painel
-        - LEIA-ME.txt             - Instrucoes
+        - README.txt              - Instrucoes
 
      - macOS/
         - Instalar_RSI_Sniper.app - Instala os arquivos
         - Abrir_Painel.app        - Abre o painel
-        - LEIA-ME.txt             - Instrucoes
+        - README.txt              - Instrucoes
 
      - Linux/
         - instalar.sh             - Instala os arquivos
         - painel.sh               - Abre o painel
-        - LEIA-ME.txt             - Instrucoes
+        - README.txt              - Instrucoes
 
      - install_rsi_sniper.py      - Instalador via terminal
 
   Documentacao/
-     - MANUAL_FUNCIONAMENTO.txt   - Como usar o sistema
-     - PRE_REQUISITOS.txt         - Requisitos de instalacao
-     - GUIA_IMPLANTACAO.txt       - Passo a passo
+     - Manual_RSI_Sniper.pdf      - Instalar, rodar o backtest e usar o painel
+     - Slides_RSI_Sniper.pdf      - Apresentacao do projeto
+     - Manual de Funcionamento.pdf
+     - Pre-Requisitos.pdf
+     - Guia de Implantação.pdf
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   INSTALACAO
@@ -46,21 +49,21 @@
   1. Abra a pasta "Instalacao/macOS"
   2. De duplo clique em "Instalar_RSI_Sniper.app"
   3. Siga as instrucoes no Terminal
-  4. Compile no MetaEditor (F7)
 
   Windows:
   ───────────
   1. Abra a pasta "Instalacao/Windows"
   2. De duplo clique em "Instalar_RSI_Sniper.bat"
   3. Siga as instrucoes
-  4. Compile no MetaEditor (F7)
 
   Linux:
   ─────────
   1. Abra a pasta "Instalacao/Linux"
   2. Execute: ./instalar.sh (ou duplo clique)
   3. Siga as instrucoes
-  4. Compile no MetaEditor (F7)
+
+  O robo ja vai compilado no pacote nos tres sistemas. O F7 no
+  MetaEditor so e necessario se voce alterar o RSI_Sniper.mq5.
 
   Via Terminal (qualquer SO):
   ──────────────────────────────
@@ -99,7 +102,8 @@
   MQL5/
   |── Experts/
   |   └── MWM/
-  |       └── RSI_Sniper.mq5      <- Expert Advisor
+  |       |── RSI_Sniper.ex5      <- Expert Advisor compilado (e o que roda)
+  |       └── RSI_Sniper.mq5      <- codigo fonte
   └── Include/
       └── MWM/
           |── RSIExport.mqh       <- Biblioteca
@@ -111,7 +115,8 @@
 
   - Painel de controle moderno com tema escuro
   - Sistema de trailing stop configuravel
-  - Filtros de confirmacao (Agressao + Volume Profile)
+  - Quatro filtros de confirmacao (Agressao, Volume Profile,
+    Tendencia e Volatilidade/ATR), cada um com direito de veto
   - Logs em tempo real
   - Configuracao dinamica sem recompilar
   - Funciona em LIVE e BACKTEST
@@ -125,9 +130,9 @@
   Em caso de duvidas ou problemas, verifique:
   - Python 3.8+ esta instalado (python3 --version)
   - MetaTrader 5 esta instalado corretamente
-  - O EA foi compilado sem erros no MetaEditor
-  - Leia o arquivo LEIA-ME.txt na pasta do seu sistema
+  - O RSI_Sniper.ex5 esta em MQL5/Experts/MWM (vai pronto no pacote)
+  - Leia o arquivo README.txt na pasta do seu sistema
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Versao: 1.0 | Projeto MWM | Marco 2026
+  Versao: 1.1 | Projeto MWM | Agosto 2026
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

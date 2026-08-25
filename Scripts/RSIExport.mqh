@@ -24,10 +24,33 @@ struct SRSIConfig {
    double trailing_pts;         // distância do trailing em pontos
    bool   usar_agressao;        // filtro de fluxo de ordens
    bool   usar_volume_profile;  // filtro de volume profile
+   bool   usar_tendencia;       // filtro de media movel (so opera a favor da mare)
+   bool   usar_atr;             // stop e alvo proporcionais a volatilidade
+   // --- ajustaveis pelo painel a partir da v2 ---
+   int    rsi_period;           // periodos do RSI (recria o handle ao mudar)
+   int    rsi_price;            // ENUM_APPLIED_PRICE como inteiro
+   double rsi_os;               // nivel de sobrevenda
+   double rsi_ob;               // nivel de sobrecompra
+   int    agr_janela;           // janela de leitura do fluxo (segundos)
+   double agr_volmin;           // volume minimo na janela
+   double agr_pctmin;           // percentual para confirmar direcao (0..1)
+   int    vp_barras;            // candles do perfil de volume
+   int    vp_passo;             // agrupamento do perfil em ticks
+   double vp_margem;            // zona neutra em torno do POC
+   int    mm_periodo;           // periodos da media movel (recria o handle)
+   int    mm_metodo;            // ENUM_MA_METHOD como inteiro (recria o handle)
+   int    atr_periodo;          // periodos do ATR (recria o handle)
+   double atr_mult_sl;          // multiplicador do ATR no stop
+   double atr_mult_tp;          // multiplicador do ATR no alvo
+   int    max_pos;              // maximo de posicoes simultaneas
+   int    log_nivel;            // ENUM_LOG_LEVEL como inteiro
+   int    export_ms;            // intervalo de exportacao para o painel
 };
 
 class CRSIExport {
 private:
+   SRSIConfig cfg_atual;      // copia usada so para publicar os valores no painel
+   bool       tem_cfg;
    string arquivo_dados;
    string arquivo_comandos;
    datetime ultimo_comando_lido;
@@ -43,6 +66,7 @@ public:
       arquivo_dados = "rsi_data" + sufixo + ".json";
       arquivo_comandos = "rsi_commands" + sufixo + ".txt";
 
+      tem_cfg = false;
       ultimo_comando_lido = 0;
       ultimo_comando_processado = "";
       contador_export = 0;
@@ -111,6 +135,11 @@ public:
       json += "  \"sinal_status\": \"Inicializando...\",\n";
       json += "  \"usar_agressao\": false,\n";
       json += "  \"usar_volume_profile\": false,\n";
+      json += "  \"usar_tendencia\": false,\n";
+      json += "  \"usar_atr\": false,\n";
+      json += "  \"mm_valor\": 0,\n";
+      json += "  \"atr_pontos\": 0,\n";
+      json += "  \"tendencia\": \"\",\n";
       json += "  \"logs\": [],\n";
       json += "  \"timestamp\": \"" + timestamp_atual + "\"\n";
       json += "}";
@@ -123,6 +152,9 @@ public:
    //+------------------------------------------------------------------+
    //| Exporta dados para o painel Python                               |
    //+------------------------------------------------------------------+
+   // Guarda os valores correntes para o painel exibir e editar
+   void SetParametros(const SRSIConfig &c) { cfg_atual = c; tem_cfg = true; }
+
    void ExportarDados(string status, string ativo, int posicoes,
                      double lucro_dia_valor, double rsi_atual,
                      double lote, double sl, double tp,
@@ -135,7 +167,11 @@ public:
                      double vp_poc = 0, double vp_vah = 0, double vp_val = 0,
                      string vp_zona = "INDEFINIDO", string sinal_status = "Aguardando...",
                      bool usar_agressao = true, bool usar_volume_profile = true,
-                     double lucro_total = 0) {  // Lucro total (apenas backtest)
+                     double lucro_total = 0,    // Lucro total (apenas backtest)
+                     // Filtro de tendencia (media movel) e stop por volatilidade (ATR)
+                     bool usar_tendencia = false, bool usar_atr = false,
+                     double mm_valor = 0, double atr_pontos = 0,
+                     string tendencia = "") {
 
       // Usa hora do servidor no backtest (acompanha tempo simulado)
       datetime agora = MQLInfoInteger(MQL_TESTER) ? TimeTradeServer() : TimeLocal();
@@ -176,6 +212,33 @@ public:
       json += "  \"sinal_status\": \"" + sinal_status + "\",\n";
       json += "  \"usar_agressao\": " + (usar_agressao ? "true" : "false") + ",\n";
       json += "  \"usar_volume_profile\": " + (usar_volume_profile ? "true" : "false") + ",\n";
+      json += "  \"usar_tendencia\": " + (usar_tendencia ? "true" : "false") + ",\n";
+      json += "  \"usar_atr\": " + (usar_atr ? "true" : "false") + ",\n";
+      json += "  \"mm_valor\": " + DoubleToString(mm_valor, _Digits) + ",\n";
+      json += "  \"atr_pontos\": " + DoubleToString(atr_pontos, 1) + ",\n";
+      json += "  \"tendencia\": \"" + tendencia + "\",\n";
+
+      // Bloco de parametros ajustaveis pelo painel
+      if(tem_cfg) {
+         json += "  \"p_rsi_period\": "  + IntegerToString(cfg_atual.rsi_period) + ",\n";
+         json += "  \"p_rsi_price\": "   + IntegerToString(cfg_atual.rsi_price) + ",\n";
+         json += "  \"p_rsi_os\": "      + DoubleToString(cfg_atual.rsi_os, 1) + ",\n";
+         json += "  \"p_rsi_ob\": "      + DoubleToString(cfg_atual.rsi_ob, 1) + ",\n";
+         json += "  \"p_agr_janela\": "  + IntegerToString(cfg_atual.agr_janela) + ",\n";
+         json += "  \"p_agr_volmin\": "  + DoubleToString(cfg_atual.agr_volmin, 1) + ",\n";
+         json += "  \"p_agr_pctmin\": "  + DoubleToString(cfg_atual.agr_pctmin, 2) + ",\n";
+         json += "  \"p_vp_barras\": "   + IntegerToString(cfg_atual.vp_barras) + ",\n";
+         json += "  \"p_vp_passo\": "    + IntegerToString(cfg_atual.vp_passo) + ",\n";
+         json += "  \"p_vp_margem\": "   + DoubleToString(cfg_atual.vp_margem, 1) + ",\n";
+         json += "  \"p_mm_periodo\": "  + IntegerToString(cfg_atual.mm_periodo) + ",\n";
+         json += "  \"p_mm_metodo\": "   + IntegerToString(cfg_atual.mm_metodo) + ",\n";
+         json += "  \"p_atr_periodo\": " + IntegerToString(cfg_atual.atr_periodo) + ",\n";
+         json += "  \"p_atr_mult_sl\": " + DoubleToString(cfg_atual.atr_mult_sl, 2) + ",\n";
+         json += "  \"p_atr_mult_tp\": " + DoubleToString(cfg_atual.atr_mult_tp, 2) + ",\n";
+         json += "  \"p_max_pos\": "     + IntegerToString(cfg_atual.max_pos) + ",\n";
+         json += "  \"p_log_nivel\": "   + IntegerToString(cfg_atual.log_nivel) + ",\n";
+         json += "  \"p_export_ms\": "   + IntegerToString(cfg_atual.export_ms) + ",\n";
+      }
 
       // Lucro total (apenas em backtest)
       if(MQLInfoInteger(MQL_TESTER)) {
@@ -289,46 +352,91 @@ public:
 
       else if(StringFind(comando, "SALVAR_CONFIG:") == 0) {
          string parametros = StringSubstr(comando, 14);
-         string valores[];
-         int total = StringSplit(parametros, ',', valores);
 
-         if(total >= 4) {
-            config.sl = StringToDouble(valores[0]);
-            config.tp = StringToDouble(valores[1]);
-            config.trailing_pts = StringToDouble(valores[2]);
-            config.trailing = (valores[3] == "1");
+         // Formato novo: chave=valor;chave=valor. Imune a mudanca de ordem e a
+         // campos que o painel nao conheca. O formato antigo (posicional) segue
+         // aceito para nao quebrar paineis desatualizados.
+         if(StringFind(parametros, "=") >= 0) {
+            string pares[];
+            int n = StringSplit(parametros, ';', pares);
+            int aplicados = 0;
+            for(int i = 0; i < n; i++) {
+               string kv[];
+               if(StringSplit(pares[i], '=', kv) != 2) continue;
+               string k = kv[0];
+               string v = kv[1];
+               StringTrimLeft(k); StringTrimRight(k);
+               StringTrimLeft(v); StringTrimRight(v);
+               double d = StringToDouble(v);
+               bool   b = (v == "1" || v == "true" || v == "True");
 
-            // Filtros de confirmação (parâmetros 5 e 6)
-            if(total >= 6) {
-               config.usar_agressao = (valores[4] == "1");
-               config.usar_volume_profile = (valores[5] == "1");
+               if(k == "sl")               config.sl = d;
+               else if(k == "tp")          config.tp = d;
+               else if(k == "trailing_pts")config.trailing_pts = d;
+               else if(k == "trailing")    config.trailing = b;
+               else if(k == "lote")        config.lote = d;
+               else if(k == "usar_agressao")       config.usar_agressao = b;
+               else if(k == "usar_volume_profile") config.usar_volume_profile = b;
+               else if(k == "usar_tendencia")      config.usar_tendencia = b;
+               else if(k == "usar_atr")            config.usar_atr = b;
+               else if(k == "rsi_period")  config.rsi_period = (int)d;
+               else if(k == "rsi_price")   config.rsi_price  = (int)d;
+               else if(k == "rsi_os")      config.rsi_os = d;
+               else if(k == "rsi_ob")      config.rsi_ob = d;
+               else if(k == "agr_janela")  config.agr_janela = (int)d;
+               else if(k == "agr_volmin")  config.agr_volmin = d;
+               else if(k == "agr_pctmin")  config.agr_pctmin = d;
+               else if(k == "vp_barras")   config.vp_barras = (int)d;
+               else if(k == "vp_passo")    config.vp_passo = (int)d;
+               else if(k == "vp_margem")   config.vp_margem = d;
+               else if(k == "mm_periodo")  config.mm_periodo = (int)d;
+               else if(k == "mm_metodo")   config.mm_metodo = (int)d;
+               else if(k == "atr_periodo") config.atr_periodo = (int)d;
+               else if(k == "atr_mult_sl") config.atr_mult_sl = d;
+               else if(k == "atr_mult_tp") config.atr_mult_tp = d;
+               else if(k == "max_pos")     config.max_pos = (int)d;
+               else if(k == "log_nivel")   config.log_nivel = (int)d;
+               else if(k == "export_ms")   config.export_ms = (int)d;
+               else continue;
+               aplicados++;
             }
-
-            // Lote incluído no comando (7º parâmetro)
-            if(total >= 7) {
-               config.lote = StringToDouble(valores[6]);
-            }
-
-            Print("[CONFIG] CONFIGURACOES SALVAS:");
-            Print("    Lote: ", DoubleToString(config.lote, 2), " | SL: ", config.sl, " pts | TP: ", config.tp, " pts");
-            Print("    Trailing: ", config.trailing ? "ON (" + DoubleToString(config.trailing_pts, 0) + " pts)" : "OFF");
-            Print("    Agressao: ", config.usar_agressao ? "ON" : "OFF", " | Volume Profile: ", config.usar_volume_profile ? "ON" : "OFF");
+            Print("[CONFIG] ", aplicados, " parametro(s) aplicado(s) pelo painel");
             ultimo_comando_processado = "CONFIG SALVA";
             sucesso = true;
+         }
+         else {
+            string valores[];
+            int total = StringSplit(parametros, ',', valores);
+
+            if(total >= 4) {
+               config.sl = StringToDouble(valores[0]);
+               config.tp = StringToDouble(valores[1]);
+               config.trailing_pts = StringToDouble(valores[2]);
+               config.trailing = (valores[3] == "1");
+
+               if(total >= 6) {
+                  config.usar_agressao = (valores[4] == "1");
+                  config.usar_volume_profile = (valores[5] == "1");
+               }
+               if(total >= 7) config.lote = StringToDouble(valores[6]);
+               if(total >= 9) {
+                  config.usar_tendencia = (valores[7] == "1");
+                  config.usar_atr = (valores[8] == "1");
+               }
+
+               Print("[CONFIG] CONFIGURACOES SALVAS (formato antigo):");
+               Print("    Lote: ", DoubleToString(config.lote, 2), " | SL: ", config.sl, " pts | TP: ", config.tp, " pts");
+               ultimo_comando_processado = "CONFIG SALVA";
+               sucesso = true;
+            }
          }
       }
 
       else if(comando == "RESETAR_CONFIG") {
-         config.lote = config_orig.lote;
-         config.sl = config_orig.sl;
-         config.tp = config_orig.tp;
-         config.trailing = config_orig.trailing;
-         config.trailing_pts = config_orig.trailing_pts;
-         config.usar_agressao = config_orig.usar_agressao;
-         config.usar_volume_profile = config_orig.usar_volume_profile;
-
-         Print("[RESET] CONFIGURACOES RESETADAS para valores originais");
-         ultimo_comando_processado = "RESETADO";
+         config = config_orig;      // struct inteira, sem esquecer campo novo
+         config.pausado = false;
+         Print("[RESET] Parametros restaurados aos valores de inicializacao");
+         ultimo_comando_processado = "CONFIG RESETADA";
          sucesso = true;
       }
 

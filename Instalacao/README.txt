@@ -18,7 +18,8 @@ INSTRUCOES:
 
 4. Siga as instrucoes na tela
 
-5. Apos instalar, compile o EA no MetaEditor (F7)
+5. Pronto. O robo ja vai compilado no pacote.
+   So precisa do F7 no MetaEditor se voce alterar o RSI_Sniper.mq5.
 
 
 INSTALACAO VIA TERMINAL (Alternativa):
@@ -28,14 +29,15 @@ INSTALACAO VIA TERMINAL (Alternativa):
 
 ARQUIVOS DO ROBO:
 
-   Os arquivos fonte estao na pasta Scripts/:
-   - RSI_Sniper.mq5  (Expert Advisor)
+   Os arquivos estao na pasta Scripts/:
+   - RSI_Sniper.ex5  (Expert Advisor ja compilado - e o que roda)
+   - RSI_Sniper.mq5  (codigo fonte do Expert Advisor)
    - RSIExport.mqh   (Biblioteca)
    - rsi_panel.py    (Painel de Controle)
 
 
 PROBLEMAS?
 
-   Leia o arquivo LEIA-ME.txt dentro da pasta do seu SO.
+   Leia o arquivo README.txt dentro da pasta do seu SO.
 
 ================================================================
